@@ -213,10 +213,10 @@ impl Options {
 
     let auth = self.auth()?;
 
-    log::info!("Connecting to Bitcoin Core at {}", self.rpc_url(None));
+    log::debug!("Connecting to Bitcoin Core at {}", self.rpc_url(None));
 
     if let Auth::CookieFile(cookie_file) = &auth {
-      log::info!(
+      log::debug!(
         "Using credentials from cookie file at `{}`",
         cookie_file.display()
       );
