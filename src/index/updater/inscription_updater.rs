@@ -1,3 +1,6 @@
+mod stream;
+
+use stream::StreamEvent;
 use {super::*, inscription::Curse};
 
 #[derive(Debug, Clone)]
@@ -15,6 +18,7 @@ enum Origin {
     parent: Option<InscriptionId>,
     pointer: Option<u64>,
     unbound: bool,
+    inscription: Inscription,
   },
   Old {
     old_satpoint: SatPoint,
@@ -42,6 +46,7 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
     &'a mut MultimapTable<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
   timestamp: u32,
   pub(super) unbound_inscriptions: u64,
+  block_hash: BlockHash,
   value_cache: &'a mut HashMap<OutPoint, u64>,
 }
 
@@ -72,6 +77,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     >,
     timestamp: u32,
     unbound_inscriptions: u64,
+    block_hash: BlockHash,
     value_cache: &'a mut HashMap<OutPoint, u64>,
   ) -> Result<Self> {
     let next_sequence_number = sequence_number_to_id
@@ -100,6 +106,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       satpoint_to_id,
       timestamp,
       unbound_inscriptions,
+      block_hash,
       value_cache,
     })
   }
@@ -108,7 +115,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     &mut self,
     tx: &Transaction,
     txid: Txid,
+    tx_block_index: usize,
     input_sat_ranges: Option<&VecDeque<(u64, u64)>>,
+    index: &Index,
   ) -> Result {
     let mut envelopes = ParsedEnvelope::from_transaction(tx).into_iter().peekable();
     let mut floating_inscriptions = Vec::new();
@@ -251,6 +260,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             parent: inscription.payload.parent(),
             pointer: inscription.payload.pointer(),
             unbound,
+            inscription: inscription.clone().payload,
           },
         });
 
@@ -293,6 +303,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
               parent,
               pointer,
               unbound,
+              inscription,
             },
         } = flotsam
         {
@@ -305,6 +316,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
               parent,
               pointer,
               unbound,
+              inscription,
             },
           }
         } else {
@@ -383,7 +395,14 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         _ => new_satpoint,
       };
 
-      self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint)?;
+      self.update_inscription_location(
+        input_sat_ranges,
+        flotsam,
+        new_satpoint,
+        tx,
+        tx_block_index,
+        index,
+      )?;
     }
 
     if is_coinbase {
@@ -392,7 +411,14 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           outpoint: OutPoint::null(),
           offset: self.lost_sats + flotsam.offset - output_value,
         };
-        self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint)?;
+        self.update_inscription_location(
+          input_sat_ranges,
+          flotsam,
+          new_satpoint,
+          tx,
+          tx_block_index,
+          index,
+        )?;
       }
       self.lost_sats += self.reward - output_value;
       Ok(())
@@ -431,12 +457,26 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     input_sat_ranges: Option<&VecDeque<(u64, u64)>>,
     flotsam: Flotsam,
     new_satpoint: SatPoint,
+    tx: &Transaction,
+    tx_block_index: usize,
+    index: &Index,
   ) -> Result {
     let inscription_id = flotsam.inscription_id.store();
     let unbound = match flotsam.origin {
       Origin::Old { old_satpoint } => {
-        self.satpoint_to_id.remove_all(&old_satpoint.store())?;
+        StreamEvent::new(
+          tx,
+          tx_block_index,
+          flotsam.inscription_id,
+          new_satpoint,
+          self.timestamp,
+          self.height,
+          self.block_hash,
+        )
+        .with_transfer(old_satpoint, index)
+        .publish()?;
 
+        self.satpoint_to_id.remove_all(&old_satpoint.store())?;
         false
       }
       Origin::New {
@@ -444,6 +484,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         fee,
         parent,
         unbound,
+        inscription,
         ..
       } => {
         let inscription_number = if cursed {
@@ -499,6 +540,23 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             .id_to_children
             .insert(&parent.store(), &inscription_id)?;
         }
+        StreamEvent::new(
+          tx,
+          tx_block_index,
+          flotsam.inscription_id,
+          match unbound {
+            true => SatPoint {
+              outpoint: unbound_outpoint(),
+              offset: self.unbound_inscriptions,
+            },
+            false => new_satpoint,
+          },
+          self.timestamp,
+          self.height,
+          self.block_hash,
+        )
+        .with_create(sat, inscription_number, inscription, parent)
+        .publish()?;
 
         unbound
       }

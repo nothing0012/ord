@@ -1,3 +1,6 @@
+use axum::routing::post;
+// use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
+
 use {
   self::{
     accept_json::AcceptJson,
@@ -39,11 +42,14 @@ use {
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
     set_header::SetResponseHeaderLayer,
+    timeout::TimeoutLayer,
   },
 };
 
 mod accept_json;
 mod error;
+mod middleware;
+mod rpc;
 
 #[derive(Clone)]
 pub struct ServerConfig {
@@ -152,6 +158,11 @@ pub(crate) struct Server {
   redirect_http_to_https: bool,
   #[arg(long, short = 'j', help = "Enable JSON API.")]
   pub(crate) enable_json_api: bool,
+  #[clap(
+    long,
+    help = "Timeout requests after <SECONDS> seconds. Default: 30 seconds."
+  )]
+  timeout: Option<u64>,
 }
 
 impl Server {
@@ -224,6 +235,10 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
+
+        // API routes
+        .route("/rpc/v1", post(rpc::handler))
+        .layer(axum::middleware::from_fn(middleware::tracing_layer))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -241,6 +256,7 @@ impl Server {
             .allow_origin(Any),
         )
         .layer(CompressionLayer::new())
+        .layer(TimeoutLayer::new(Duration::from_secs(self.timeout.unwrap_or(30))))
         .with_state(server_config);
 
       match (self.http_port(), self.https_port()) {
@@ -1286,6 +1302,10 @@ mod tests {
       Self::new_with_args(&["--index-sats"], &[])
     }
 
+    fn new_with_timeout() -> Self {
+      Self::new_with_args(&[], &["--timeout", "1"])
+    }
+
     fn new_with_args(ord_args: &[&str], server_args: &[&str]) -> Self {
       Self::new_server(test_bitcoincore_rpc::spawn(), None, ord_args, server_args)
     }
@@ -2039,6 +2059,15 @@ mod tests {
   <li><a href=/range/0/5000000000 class=mythic>0–5000000000</a></li>
 </ul>.*"
       ),
+    );
+  }
+
+  #[test]
+  fn output_with_timeout() {
+    TestServer::new_with_timeout().assert_response_regex(
+      "/block/0",
+      StatusCode::OK,
+      ".*<title>Block 0</title>.*<h1>Block 0</h1>.*",
     );
   }
 
