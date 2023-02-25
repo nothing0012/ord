@@ -6,6 +6,16 @@ pub(super) struct Flotsam {
   origin: Origin,
 }
 
+#[derive(Serialize)]
+pub struct StreamEvent {
+  inscription_id: InscriptionId,
+  old_satpoint: Option<SatPoint>,
+  new_satpoint: SatPoint,
+  sat: Option<Sat>,
+  number: Option<u64>,
+  timestamp: Option<u32>,
+}
+
 enum Origin {
   New(u64),
   Old(SatPoint),
@@ -193,10 +203,19 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     new_satpoint: SatPoint,
   ) -> Result {
     let inscription_id = flotsam.inscription_id.store();
+    let mut stream_event = StreamEvent {
+      inscription_id: flotsam.inscription_id,
+      new_satpoint,
+      old_satpoint: None,
+      timestamp: None,
+      sat: None,
+      number: None,
+    };
 
     match flotsam.origin {
       Origin::Old(old_satpoint) => {
         self.satpoint_to_id.remove(&old_satpoint.store())?;
+        stream_event.old_satpoint = Some(old_satpoint);
       }
       Origin::New(fee) => {
         self
@@ -230,6 +249,10 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           .store(),
         )?;
 
+        stream_event.timestamp = Some(self.timestamp);
+        stream_event.sat = sat;
+        stream_event.number = Some(self.next_number);
+
         self.next_number += 1;
       }
     }
@@ -239,6 +262,66 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     self.satpoint_to_id.insert(&new_satpoint, &inscription_id)?;
     self.id_to_satpoint.insert(&inscription_id, &new_satpoint)?;
 
+    #[cfg(feature = "kafka")]
+    {
+      use self::stream::CLIENT;
+      CLIENT.emit(stream_event)?;
+    }
+
     Ok(())
+  }
+}
+
+#[cfg(feature = "kafka")]
+mod stream {
+  use super::*;
+  use rdkafka::{
+    config::FromClientConfig,
+    producer::{BaseProducer, BaseRecord},
+    ClientConfig,
+  };
+  use std::env;
+
+  lazy_static! {
+    pub static ref CLIENT: StreamClient = StreamClient::new();
+  }
+
+  pub struct StreamClient {
+    producer: BaseProducer,
+    topic: String,
+  }
+
+  impl StreamClient {
+    pub fn new() -> Self {
+      StreamClient {
+        producer: BaseProducer::from_config(
+          ClientConfig::new()
+            .set(
+              "bootstrap.servers",
+              env::var("KAFKA_BOOTSTRAP_SERVERS").unwrap_or("localhost:9092".to_owned()),
+            )
+            .set(
+              "message.timeout.ms",
+              env::var("KAFKA_MESSAGE_TIMEOUT_MS").unwrap_or("5000".to_owned()),
+            )
+            .set(
+              "client.id",
+              env::var("KAFKA_CLIENT_ID").unwrap_or("ord-producer".to_owned()),
+            ),
+        )
+        .expect("failed to create kafka producer"),
+        topic: env::var("KAFKA_TOPIC").unwrap_or("ord-stream".to_owned()),
+      }
+    }
+
+    pub fn emit(&self, event: StreamEvent) -> Result {
+      let key = event.inscription_id.to_string();
+      let payload = serde_json::to_vec(&event)?;
+      let record = BaseRecord::to(&self.topic).key(&key).payload(&payload);
+      match self.producer.send(record) {
+        Ok(_) => Ok(()),
+        Err((e, _)) => Err(anyhow!("failed to send kafka message: {}", e)),
+      }
+    }
   }
 }
