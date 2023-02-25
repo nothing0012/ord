@@ -83,8 +83,8 @@ use {
   tokio::{runtime::Runtime, task},
 };
 
-pub use self::{
-  envelope::Envelope,
+pub use crate::{
+  block_rarity::BlockRarity,
   fee_rate::FeeRate,
   index::Index,
   inscription::Inscription,
@@ -115,6 +115,7 @@ macro_rules! tprintln {
 }
 
 mod arguments;
+mod block_rarity;
 mod blocktime;
 mod chain;
 mod charm;
@@ -144,6 +145,7 @@ pub mod subcommand;
 mod tally;
 mod teleburn;
 pub mod templates;
+mod tracer;
 mod wallet;
 
 type Result<T = (), E = Error> = std::result::Result<T, E>;
@@ -222,12 +224,20 @@ fn gracefully_shutdown_indexer() {
 pub fn main() {
   env_logger::init();
 
+  // Tracer setup
+  if env::var("DD_SERVICE").is_ok() {
+    tracer::init().unwrap_or_else(|err| {
+      log::error!("Fatal - failed to initialize tracer: {:?}", err);
+      process::exit(1);
+    });
+  }
+
   ctrlc::set_handler(move || {
     if SHUTTING_DOWN.fetch_or(true, atomic::Ordering::Relaxed) {
       process::exit(1);
     }
 
-    println!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
+    log::info!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
 
     LISTENERS
       .lock()
@@ -259,4 +269,5 @@ pub fn main() {
   }
 
   gracefully_shutdown_indexer();
+  tracer::close();
 }
