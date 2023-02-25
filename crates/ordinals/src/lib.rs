@@ -27,10 +27,10 @@ use {
 };
 
 pub use {
-  artifact::Artifact, cenotaph::Cenotaph, charm::Charm, decimal_sat::DecimalSat, degree::Degree,
-  edict::Edict, epoch::Epoch, etching::Etching, flaw::Flaw, height::Height, pile::Pile,
-  rarity::Rarity, rune::Rune, rune_id::RuneId, runestone::Runestone, sat::Sat, sat_point::SatPoint,
-  spaced_rune::SpacedRune, terms::Terms,
+  artifact::Artifact, block_rarity::BlockRarity, cenotaph::Cenotaph, charm::Charm,
+  decimal_sat::DecimalSat, degree::Degree, edict::Edict, epoch::Epoch, etching::Etching,
+  flaw::Flaw, height::Height, pile::Pile, rarity::Rarity, rune::Rune, rune_id::RuneId,
+  runestone::Runestone, sat::Sat, sat_point::SatPoint, spaced_rune::SpacedRune, terms::Terms,
 };
 
 pub const CYCLE_EPOCHS: u32 = 6;
@@ -40,6 +40,7 @@ fn default<T: Default>() -> T {
 }
 
 mod artifact;
+pub mod block_rarity;
 mod cenotaph;
 mod charm;
 mod decimal_sat;

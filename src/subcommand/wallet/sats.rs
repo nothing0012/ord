@@ -147,6 +147,35 @@ impl Sats {
   }
 }
 
+pub(crate) fn rare_sats_from_outpoint(
+  outpoint: OutPoint,
+  sat_ranges: Vec<(u64, u64)>,
+) -> Vec<(OutPoint, Sat, u64, Rarity)> {
+  let mut offset = 0;
+  let mut rare_sats = vec![];
+  for (start, end) in sat_ranges {
+    let first_offset = offset;
+    offset += end - start;
+    let last_offset = offset - 1;
+
+    let first_sat = Sat(start);
+    let first_rarity = first_sat.rarity();
+    if first_rarity > Rarity::Common {
+      rare_sats.push((outpoint, first_sat, first_offset, first_rarity));
+    }
+
+    if end - 1 > start {
+      let last_sat = Sat(end - 1);
+      let last_rarity = last_sat.rarity();
+
+      if last_rarity > Rarity::Common {
+        rare_sats.push((outpoint, last_sat, last_offset, last_rarity));
+      }
+    }
+  }
+  rare_sats
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

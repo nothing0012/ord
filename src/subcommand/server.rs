@@ -31,10 +31,12 @@ use {
   },
   std::{cmp::Ordering, str, sync::Arc},
   tokio_stream::StreamExt,
+  tower::limit::concurrency::ConcurrencyLimitLayer,
   tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
     set_header::SetResponseHeaderLayer,
+    timeout::TimeoutLayer,
     validate_request::ValidateRequestHeaderLayer,
   },
 };
@@ -44,8 +46,54 @@ pub(crate) use server_config::ServerConfig;
 mod accept_encoding;
 mod accept_json;
 mod error;
+mod middleware;
 pub mod query;
+mod rpc;
 mod server_config;
+
+#[derive(Copy, Clone)]
+pub(crate) enum InscriptionQuery {
+  Id(InscriptionId),
+  Number(i32),
+}
+
+impl FromStr for InscriptionQuery {
+  type Err = Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    Ok(if s.contains('i') {
+      Self::Id(s.parse()?)
+    } else {
+      Self::Number(s.parse()?)
+    })
+  }
+}
+
+impl Display for InscriptionQuery {
+  fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    match self {
+      Self::Id(id) => write!(f, "{id}"),
+      Self::Number(number) => write!(f, "{number}"),
+    }
+  }
+}
+
+enum BlockQuery {
+  Height(u32),
+  Hash(BlockHash),
+}
+
+impl FromStr for BlockQuery {
+  type Err = Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    Ok(if s.len() == 64 {
+      BlockQuery::Hash(s.parse()?)
+    } else {
+      BlockQuery::Height(s.parse()?)
+    })
+  }
+}
 
 enum SpawnConfig {
   Https(AxumAcceptor),
@@ -137,11 +185,22 @@ pub struct Server {
     help = "Poll Bitcoin Core every <POLLING_INTERVAL>."
   )]
   pub(crate) polling_interval: humantime::Duration,
+  #[clap(
+    long,
+    help = "Timeout requests after <SECONDS> seconds. Default: 30 seconds."
+  )]
+  timeout: Option<u64>,
+  #[clap(long, help = "Set max concurrent connections. Default: 1024")]
+  max_connections: Option<usize>,
 }
 
 impl Server {
   pub fn run(self, settings: Settings, index: Arc<Index>, handle: Handle) -> SubcommandResult {
     Runtime::new()?.block_on(async {
+      log::debug!(
+        "Starting server with {} max connections",
+        self.max_connections.unwrap_or(1024)
+      );
       let index_clone = index.clone();
       let integration_test = settings.integration_test();
 
@@ -263,7 +322,18 @@ impl Server {
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
         .route("/update", get(Self::update))
+
+        // API routes
+        .route("/rpc/v1", post(rpc::handler)
+          .route_layer(TimeoutLayer::new(Duration::from_secs(self.timeout.unwrap_or(30))))
+          .route_layer(
+            ConcurrencyLimitLayer::new(
+              self.max_connections.unwrap_or(1024),
+            )
+          )
+        )
         .fallback(Self::fallback)
+        .layer(axum::middleware::from_fn(middleware::tracing_layer))
         .layer(Extension(index))
         .layer(Extension(server_config.clone()))
         .layer(Extension(settings.clone()))
@@ -2085,6 +2155,10 @@ mod tests {
     fn redirect_http_to_https(self) -> Self {
       self.server_flag("--redirect-http-to-https")
     }
+
+    fn timeout(self) -> Self {
+      self.server_option("--timeout", "1")
+    }
   }
 
   struct TestServer {
@@ -3550,6 +3624,18 @@ mod tests {
   <li><a href=/range/0/5000000000 class=mythic>0–5000000000</a></li>
 </ul>.*"
         ),
+      );
+  }
+
+  #[test]
+  fn output_with_timeout() {
+    TestServer::builder()
+      .timeout()
+      .build()
+      .assert_response_regex(
+        "/block/0",
+        StatusCode::OK,
+        ".*<title>Block 0</title>.*<h1>Block 0</h1>.*",
       );
   }
 
