@@ -57,6 +57,10 @@ impl Sat {
     self.into()
   }
 
+  pub(crate) fn block_rarities(self) -> Vec<BlockRarity> {
+    self.into()
+  }
+
   /// `Sat::rarity` is expensive and is called frequently when indexing.
   /// Sat::is_common only checks if self is `Rarity::Common` but is
   /// much faster.
@@ -622,7 +626,10 @@ mod tests {
   fn common() {
     #[track_caller]
     fn case(n: u64) {
-      assert_eq!(Sat(n).common(), Sat(n).rarity() == Rarity::Common);
+      assert_eq!(
+        Sat(n).is_common(),
+        Sat(n).rarity() == Rarity::Common || Sat(n).rarity() > Rarity::Mythic
+      );
     }
 
     case(0);
