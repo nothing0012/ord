@@ -1,3 +1,4 @@
+use self::stream::StreamEvent;
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -260,6 +261,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           input_sat_ranges,
           inscriptions.next().unwrap(),
           new_satpoint,
+          tx,
         )?;
       }
 
@@ -280,7 +282,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           outpoint: OutPoint::null(),
           offset: self.lost_sats + flotsam.offset - output_value,
         };
-        self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint)?;
+        self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint, tx)?;
       }
       self.lost_sats += self.reward - output_value;
       Ok(())
@@ -299,20 +301,15 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     input_sat_ranges: Option<&VecDeque<(u64, u64)>>,
     flotsam: Flotsam,
     new_satpoint: SatPoint,
+    #[allow(unused_variables)] tx: &Transaction,
   ) -> Result {
     let inscription_id = flotsam.inscription_id.store();
-    let mut stream_event = StreamEvent {
-      inscription_id: flotsam.inscription_id,
-      new_satpoint,
-      old_satpoint: None,
-      timestamp: None,
-      sat: None,
-      number: None,
-    };
     let unbound = match flotsam.origin {
       Origin::Old { old_satpoint } => {
         self.satpoint_to_id.remove(&old_satpoint.store())?;
-        stream_event.old_satpoint = Some(old_satpoint);
+        StreamEvent::new(tx, flotsam.inscription_id, new_satpoint)
+          .with_transfer(old_satpoint)
+          .publish()?;
         false
       }
       Origin::New {
@@ -361,9 +358,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           .store(),
         )?;
 
-        stream_event.timestamp = Some(self.timestamp);
-        stream_event.sat = sat;
-        stream_event.number = Some(number);
+        StreamEvent::new(tx, flotsam.inscription_id, new_satpoint)
+          .with_create(tx, sat, number, self.timestamp)
+          .publish()?;
 
         unbound
       }
@@ -383,17 +380,10 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     self.satpoint_to_id.insert(&satpoint, &inscription_id)?;
     self.id_to_satpoint.insert(&inscription_id, &satpoint)?;
 
-    #[cfg(feature = "kafka")]
-    {
-      use self::stream::CLIENT;
-      CLIENT.emit(stream_event)?;
-    }
-
     Ok(())
   }
 }
 
-#[cfg(feature = "kafka")]
 mod stream {
   use super::*;
   use rdkafka::{
@@ -404,16 +394,16 @@ mod stream {
   use std::env;
 
   lazy_static! {
-    pub static ref CLIENT: StreamClient = StreamClient::new();
+    static ref CLIENT: StreamClient = StreamClient::new();
   }
 
-  pub struct StreamClient {
+  struct StreamClient {
     producer: BaseProducer,
     topic: String,
   }
 
   impl StreamClient {
-    pub fn new() -> Self {
+    fn new() -> Self {
       StreamClient {
         producer: BaseProducer::from_config(
           ClientConfig::new()
@@ -434,12 +424,90 @@ mod stream {
         topic: env::var("KAFKA_TOPIC").unwrap_or("ord-stream".to_owned()),
       }
     }
+  }
 
-    pub fn emit(&self, event: StreamEvent) -> Result {
-      let key = event.inscription_id.to_string();
-      let payload = serde_json::to_vec(&event)?;
-      let record = BaseRecord::to(&self.topic).key(&key).payload(&payload);
-      match self.producer.send(record) {
+  #[derive(Serialize)]
+  pub struct StreamEvent {
+    // common fields
+    inscription_id: InscriptionId,
+    tx_value: u64,
+    new_satpoint: SatPoint,
+    new_owner: Option<Address>,
+
+    // create fields
+    sat: Option<Sat>,
+    inscription_number: Option<u64>,
+    inscription_timestamp: Option<u32>,
+    content_type: Option<String>,
+    content_length: Option<usize>,
+    content_media: Option<String>,
+
+    // transfer fields
+    old_satpoint: Option<SatPoint>,
+  }
+
+  impl StreamEvent {
+    pub fn new(tx: &Transaction, inscription_id: InscriptionId, new_satpoint: SatPoint) -> Self {
+      StreamEvent {
+        inscription_id,
+        new_satpoint,
+        new_owner: Some(
+          Address::from_script(
+            &tx
+              .output
+              .get(new_satpoint.outpoint.vout as usize)
+              .expect("invalid satpoint")
+              .script_pubkey,
+            StreamEvent::get_network(),
+          )
+          .unwrap(),
+        ),
+        tx_value: tx.output.iter().map(|txout: &TxOut| txout.value).sum(),
+        sat: None,
+        inscription_number: None,
+        content_type: None,
+        content_length: None,
+        content_media: None,
+        inscription_timestamp: None,
+        old_satpoint: None,
+      }
+    }
+
+    fn get_network() -> Network {
+      Network::from_str(&env::var("NETWORK").unwrap_or("bitcoin".to_owned())).unwrap()
+    }
+
+    pub fn with_transfer(&mut self, old_satpoint: SatPoint) -> &mut Self {
+      self.old_satpoint = Some(old_satpoint);
+      self
+    }
+
+    pub fn with_create(
+      &mut self,
+      tx: &Transaction,
+      sat: Option<Sat>,
+      inscription_number: u64,
+      inscription_timestamp: u32,
+    ) -> &mut Self {
+      let inscription = Inscription::from_transaction(tx).unwrap();
+
+      self.content_type = inscription
+        .content_type()
+        .map(|content_type| content_type.to_string());
+      self.content_length = inscription.content_length();
+      self.content_media = Some(inscription.media().to_string());
+
+      self.sat = sat;
+      self.inscription_number = Some(inscription_number);
+      self.inscription_timestamp = Some(inscription_timestamp);
+      self
+    }
+
+    pub fn publish(&self) -> Result {
+      let key = self.inscription_id.to_string();
+      let payload = serde_json::to_vec(&self)?;
+      let record = BaseRecord::to(&CLIENT.topic).key(&key).payload(&payload);
+      match CLIENT.producer.send(record) {
         Ok(_) => Ok(()),
         Err((e, _)) => Err(anyhow!("failed to send kafka message: {}", e)),
       }
