@@ -311,6 +311,7 @@ mod stream {
     tx_value: u64,
     new_satpoint: SatPoint,
     new_owner: Option<Address>,
+    new_output_value: u64,
 
     // create fields
     sat: Option<Sat>,
@@ -340,6 +341,11 @@ mod stream {
           )
           .unwrap(),
         ),
+        new_output_value: tx
+          .output
+          .get(new_satpoint.outpoint.vout as usize)
+          .expect("invalid satpoint")
+          .value,
         tx_value: tx.output.iter().map(|txout: &TxOut| txout.value).sum(),
         sat: None,
         inscription_number: None,
