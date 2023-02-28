@@ -457,16 +457,19 @@ mod stream {
             &tx
               .output
               .get(new_satpoint.outpoint.vout as usize)
-              .expect("invalid satpoint")
+              .unwrap_or(&TxOut::default())
               .script_pubkey,
             StreamEvent::get_network(),
           )
-          .unwrap(),
+          .unwrap_or(Address::p2sh(&Script::default(), StreamEvent::get_network()).unwrap()),
         ),
         new_output_value: tx
           .output
           .get(new_satpoint.outpoint.vout as usize)
-          .expect("invalid satpoint")
+          .unwrap_or(&TxOut {
+            value: 0,
+            script_pubkey: Script::new(),
+          })
           .value,
         tx_value: tx.output.iter().map(|txout: &TxOut| txout.value).sum(),
         sat: None,
