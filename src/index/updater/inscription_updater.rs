@@ -309,6 +309,7 @@ mod stream {
     // common fields
     inscription_id: InscriptionId,
     tx_value: u64,
+    tx_id: String,
     new_satpoint: SatPoint,
     new_owner: Option<Address>,
     new_output_value: u64,
@@ -350,6 +351,7 @@ mod stream {
           })
           .value,
         tx_value: tx.output.iter().map(|txout: &TxOut| txout.value).sum(),
+        tx_id: tx.txid().to_string(),
         sat: None,
         inscription_number: None,
         content_type: None,
