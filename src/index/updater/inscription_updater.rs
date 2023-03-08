@@ -334,12 +334,12 @@ mod stream {
 
     // create fields
     sat: Option<Sat>,
+    sat_details: Option<Output>, // Output is borrowed from subcommand::traits::Output, to show the details of the sat
     inscription_number: Option<u64>,
     content_type: Option<String>,
     content_length: Option<usize>,
     content_media: Option<String>,
     content_body: Option<String>,
-    new_satpoint_output: Option<Output>,
 
     // transfer fields
     old_location: Option<SatPoint>,
@@ -386,7 +386,7 @@ mod stream {
         content_media: None,
         content_body: None,
         old_location: None,
-        new_satpoint_output: None,
+        sat_details: None,
       }
     }
 
@@ -430,7 +430,7 @@ mod stream {
 
       self.sat = sat;
       self.inscription_number = Some(inscription_number);
-      self.new_satpoint_output = match self.sat {
+      self.sat_details = match self.sat {
         Some(Sat(n)) => {
           let sat = Sat(n);
           Some(Output {
