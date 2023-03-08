@@ -203,9 +203,15 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         #[cfg(feature = "kafka")]
         {
           use self::stream::StreamEvent;
-          StreamEvent::new(tx, flotsam.inscription_id, new_satpoint)
-            .with_transfer(old_satpoint)
-            .publish()?;
+          StreamEvent::new(
+            tx,
+            flotsam.inscription_id,
+            new_satpoint,
+            self.timestamp,
+            self.height,
+          )
+          .with_transfer(old_satpoint)
+          .publish()?;
         }
       }
       Origin::New(fee) => {
@@ -243,9 +249,15 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         #[cfg(feature = "kafka")]
         {
           use self::stream::StreamEvent;
-          StreamEvent::new(tx, flotsam.inscription_id, new_satpoint)
-            .with_create(tx, sat, self.next_number, self.timestamp)
-            .publish()?;
+          StreamEvent::new(
+            tx,
+            flotsam.inscription_id,
+            new_satpoint,
+            self.timestamp,
+            self.height,
+          )
+          .with_create(tx, sat, self.next_number)
+          .publish()?;
         }
 
         self.next_number += 1;
@@ -263,7 +275,10 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 
 #[cfg(feature = "kafka")]
 mod stream {
+  use crate::subcommand::traits::Output;
+
   use super::*;
+  use base64::encode;
   use rdkafka::{
     config::FromClientConfig,
     producer::{BaseProducer, BaseRecord},
@@ -310,27 +325,39 @@ mod stream {
     inscription_id: InscriptionId,
     tx_value: u64,
     tx_id: String,
-    new_satpoint: SatPoint,
+    new_location: SatPoint,
     new_owner: Option<Address>,
     new_output_value: u64,
+
+    block_timestamp: u32,
+    block_height: u64,
 
     // create fields
     sat: Option<Sat>,
     inscription_number: Option<u64>,
-    inscription_timestamp: Option<u32>,
     content_type: Option<String>,
     content_length: Option<usize>,
     content_media: Option<String>,
+    content_body: Option<String>,
+    new_satpoint_output: Option<Output>,
 
     // transfer fields
-    old_satpoint: Option<SatPoint>,
+    old_location: Option<SatPoint>,
   }
 
   impl StreamEvent {
-    pub fn new(tx: &Transaction, inscription_id: InscriptionId, new_satpoint: SatPoint) -> Self {
+    pub fn new(
+      tx: &Transaction,
+      inscription_id: InscriptionId,
+      new_satpoint: SatPoint,
+      block_timestamp: u32,
+      block_height: u64,
+    ) -> Self {
       StreamEvent {
         inscription_id,
-        new_satpoint,
+        new_location: new_satpoint,
+        block_timestamp,
+        block_height,
         new_owner: Some(
           Address::from_script(
             &tx
@@ -357,8 +384,9 @@ mod stream {
         content_type: None,
         content_length: None,
         content_media: None,
-        inscription_timestamp: None,
-        old_satpoint: None,
+        content_body: None,
+        old_location: None,
+        new_satpoint_output: None,
       }
     }
 
@@ -367,7 +395,7 @@ mod stream {
     }
 
     pub fn with_transfer(&mut self, old_satpoint: SatPoint) -> &mut Self {
-      self.old_satpoint = Some(old_satpoint);
+      self.old_location = Some(old_satpoint);
       self
     }
 
@@ -376,7 +404,6 @@ mod stream {
       tx: &Transaction,
       sat: Option<Sat>,
       inscription_number: u64,
-      inscription_timestamp: u32,
     ) -> &mut Self {
       let inscription = Inscription::from_transaction(tx).unwrap();
 
@@ -385,10 +412,42 @@ mod stream {
         .map(|content_type| content_type.to_string());
       self.content_length = inscription.content_length();
       self.content_media = Some(inscription.media().to_string());
+      self.content_body = match inscription.body() {
+        Some(body) => {
+          // only encode if the body length is less than 1M bytes
+          let kafka_body_max_bytes = env::var("KAFKA_BODY_MAX_BYTES")
+            .unwrap_or("950000".to_owned())
+            .parse::<usize>()
+            .unwrap();
+          if body.len() < kafka_body_max_bytes {
+            Some(encode::<&[u8]>(body))
+          } else {
+            None
+          }
+        }
+        None => None,
+      };
 
       self.sat = sat;
       self.inscription_number = Some(inscription_number);
-      self.inscription_timestamp = Some(inscription_timestamp);
+      self.new_satpoint_output = match self.sat {
+        Some(Sat(n)) => {
+          let sat = Sat(n);
+          Some(Output {
+            number: sat.n(),
+            decimal: sat.decimal().to_string(),
+            degree: sat.degree().to_string(),
+            name: sat.name(),
+            height: sat.height().0,
+            cycle: sat.cycle(),
+            epoch: sat.epoch().0,
+            period: sat.period(),
+            offset: sat.third(),
+            rarity: sat.rarity(),
+          })
+        }
+        None => None,
+      };
       self
     }
 
