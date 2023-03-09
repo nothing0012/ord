@@ -283,7 +283,7 @@ mod stream {
   use base64::encode;
   use rdkafka::{
     config::FromClientConfig,
-    producer::{BaseProducer, BaseRecord},
+    producer::{BaseProducer, BaseRecord, Producer},
     ClientConfig,
   };
   use std::env;
@@ -460,7 +460,14 @@ mod stream {
       match CLIENT.producer.send(record) {
         Ok(_) => Ok(()),
         Err((e, _)) => Err(anyhow!("failed to send kafka message: {}", e)),
-      }
+      }?;
+      if CLIENT.producer.in_flight_count() > 0 {
+        match CLIENT.producer.flush(Duration::from_secs(30)) {
+          Ok(_) => Ok(()),
+          Err(e) => Err(anyhow!("failed to flush kafka message: {}", e)),
+        }?;
+      };
+      Ok(())
     }
   }
 }
