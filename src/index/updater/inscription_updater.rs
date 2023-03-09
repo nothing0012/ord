@@ -309,6 +309,14 @@ mod stream {
               env::var("KAFKA_MESSAGE_TIMEOUT_MS").unwrap_or("5000".to_owned()),
             )
             .set(
+              "queue.buffering.max.messages",
+              env::var("KAFKA_QUEUE_BUFFERING_MAX_MESSAGES").unwrap_or("100000".to_owned()),
+            )
+            .set(
+              "queue.buffering.max.kbytes",
+              env::var("KAFKA_QUEUE_BUFFERING_MAX_KBYTES").unwrap_or("32000000".to_owned()), // 32MB
+            )
+            .set(
               "client.id",
               env::var("KAFKA_CLIENT_ID").unwrap_or("ord-producer".to_owned()),
             ),
