@@ -538,7 +538,7 @@ mod stream {
             .unwrap_or("950000".to_owned())
             .parse::<usize>()
             .unwrap();
-          if body.len() < kafka_body_max_bytes {
+          if inscription.media() == Media::Text && body.len() < kafka_body_max_bytes {
             Some(encode::<&[u8]>(body))
           } else {
             None
