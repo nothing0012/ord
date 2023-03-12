@@ -617,7 +617,7 @@ mod stream {
       headers.insert(
         "Authorization",
         HeaderValue::from_str(
-          &env::var("STREM_HTTP_HEADER_AUTHORIZATION").unwrap_or("".to_owned()),
+          &env::var("STREAM_HTTP_HEADER_AUTHORIZATION").unwrap_or("".to_owned()),
         )
         .unwrap(),
       );
