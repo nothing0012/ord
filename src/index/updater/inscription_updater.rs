@@ -279,13 +279,11 @@ mod stream {
 
   use super::*;
   use base64::encode;
-  use http::{HeaderMap, HeaderValue};
   use rdkafka::{
     config::FromClientConfig,
     producer::{BaseProducer, BaseRecord, Producer},
     ClientConfig,
   };
-  use reqwest::blocking::Client;
   use std::env;
   use std::str::FromStr;
 
@@ -346,9 +344,6 @@ mod stream {
 
     // transfer fields
     old_location: Option<SatPoint>,
-
-    // published event
-    published_by: Option<String>,
   }
 
   impl StreamEvent {
@@ -393,7 +388,6 @@ mod stream {
         content_body: None,
         old_location: None,
         sat_details: None,
-        published_by: None,
       }
     }
 
@@ -459,13 +453,6 @@ mod stream {
     }
 
     pub fn publish(&mut self) -> Result {
-      self.publish_via_kafka()?;
-      self.publish_via_http()
-    }
-
-    pub fn publish_via_kafka(&mut self) -> Result {
-      self.published_by = Some("kafka".to_owned());
-
       let key = self.inscription_id.to_string();
       let payload = serde_json::to_vec(&self)?;
       let record = BaseRecord::to(&CLIENT.topic).key(&key).payload(&payload);
@@ -480,34 +467,7 @@ mod stream {
           Err(e) => Err(anyhow!("failed to flush kafka message: {}", e)),
         }?;
       };
-
       println!("{}", serde_json::to_string(&self)?);
-      Ok(())
-    }
-
-    pub fn publish_via_http(&mut self) -> Result {
-      let url = env::var("STREM_HTTP_URL").unwrap_or("".to_owned());
-      if url.is_empty() {
-        return Ok(());
-      }
-      self.published_by = Some("http".to_owned());
-
-      let payload_str = serde_json::to_string(&self)?;
-      let client = Client::new();
-      let mut headers = HeaderMap::new();
-      headers.insert(
-        "Authorization",
-        HeaderValue::from_str(
-          &env::var("STREAM_HTTP_HEADER_AUTHORIZATION").unwrap_or("".to_owned()),
-        )
-        .unwrap(),
-      );
-      match client.post(url).headers(headers).json(&payload_str).send() {
-        Ok(_) => Ok(()),
-        Err(e) => Err(anyhow!("failed to send http body: {}", e)),
-      }?;
-
-      println!("{}", payload_str);
       Ok(())
     }
   }
