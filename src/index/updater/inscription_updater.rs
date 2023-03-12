@@ -281,6 +281,7 @@ mod stream {
 
   use super::*;
   use base64::encode;
+  use http::{HeaderMap, HeaderValue};
   use rdkafka::{
     config::FromClientConfig,
     producer::{BaseProducer, BaseRecord, Producer},
@@ -495,7 +496,15 @@ mod stream {
 
       let payload_str = serde_json::to_string(&self)?;
       let client = Client::new();
-      match client.post(url).json(&payload_str).send() {
+      let mut headers = HeaderMap::new();
+      headers.insert(
+        "Authorization",
+        HeaderValue::from_str(
+          &env::var("STREM_HTTP_HEADER_AUTHORIZATION").unwrap_or("".to_owned()),
+        )
+        .unwrap(),
+      );
+      match client.post(url).headers(headers).json(&payload_str).send() {
         Ok(_) => Ok(()),
         Err(e) => Err(anyhow!("failed to send http body: {}", e)),
       }?;
