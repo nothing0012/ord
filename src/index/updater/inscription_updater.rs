@@ -1,6 +1,6 @@
 use self::stream::StreamEvent;
-use crate::inscription::TransactionInscription;
 use super::*;
+use crate::inscription::TransactionInscription;
 
 #[derive(Debug, Clone)]
 pub(super) struct Flotsam {
@@ -38,6 +38,7 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
   timestamp: u32,
   pub(super) unbound_inscriptions: u64,
+  block_hash: BlockHash,
   value_cache: &'a mut HashMap<OutPoint, u64>,
 }
 
@@ -54,6 +55,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
     timestamp: u32,
     unbound_inscriptions: u64,
+    block_hash: BlockHash,
     value_cache: &'a mut HashMap<OutPoint, u64>,
   ) -> Result<Self> {
     let next_cursed_number = number_to_id
@@ -85,6 +87,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       satpoint_to_id,
       timestamp,
       unbound_inscriptions,
+      block_hash,
       value_cache,
     })
   }
@@ -308,6 +311,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           new_satpoint,
           self.timestamp,
           self.height,
+          self.block_hash,
         )
         .with_transfer(old_satpoint)
         .publish()?;
@@ -367,8 +371,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           new_satpoint,
           self.timestamp,
           self.height,
+          self.block_hash,
         )
-        .with_create(sat, number, inscription)
+        .with_create(tx, sat, self.next_number)
         .publish()?;
 
         unbound
@@ -394,8 +399,8 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 }
 
 mod stream {
-  use crate::subcommand::traits::Output;
   use crate::inscription::TransactionInscription;
+  use crate::subcommand::traits::Output;
 
   use super::*;
   use base64::encode;
@@ -452,6 +457,7 @@ mod stream {
 
     block_timestamp: u32,
     block_height: u64,
+    block_hash: BlockHash,
 
     // create fields
     sat: Option<Sat>,
@@ -473,12 +479,14 @@ mod stream {
       new_satpoint: SatPoint,
       block_timestamp: u32,
       block_height: u64,
+      block_hash: BlockHash,
     ) -> Self {
       StreamEvent {
         inscription_id,
         new_location: new_satpoint,
         block_timestamp,
         block_height,
+        block_hash,
         new_owner: Some(
           Address::from_script(
             &tx
