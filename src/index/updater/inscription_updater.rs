@@ -25,6 +25,7 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   sat_to_inscription_id: &'a mut Table<'db, 'tx, u64, &'static InscriptionIdValue>,
   satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
   timestamp: u32,
+  block_hash: BlockHash,
   value_cache: &'a mut HashMap<OutPoint, u64>,
 }
 
@@ -40,6 +41,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     sat_to_inscription_id: &'a mut Table<'db, 'tx, u64, &'static InscriptionIdValue>,
     satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
     timestamp: u32,
+    block_hash: BlockHash,
     value_cache: &'a mut HashMap<OutPoint, u64>,
   ) -> Result<Self> {
     let next_number = number_to_id
@@ -63,6 +65,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       sat_to_inscription_id,
       satpoint_to_id,
       timestamp,
+      block_hash,
       value_cache,
     })
   }
@@ -211,6 +214,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             new_satpoint,
             self.timestamp,
             self.height,
+            self.block_hash,
           )
           .with_transfer(old_satpoint)
           .publish()?;
@@ -257,6 +261,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             new_satpoint,
             self.timestamp,
             self.height,
+            self.block_hash,
           )
           .with_create(tx, sat, self.next_number)
           .publish()?;
@@ -334,6 +339,7 @@ mod stream {
 
     block_timestamp: u32,
     block_height: u64,
+    block_hash: BlockHash,
 
     // create fields
     sat: Option<Sat>,
@@ -355,12 +361,14 @@ mod stream {
       new_satpoint: SatPoint,
       block_timestamp: u32,
       block_height: u64,
+      block_hash: BlockHash,
     ) -> Self {
       StreamEvent {
         inscription_id,
         new_location: new_satpoint,
         block_timestamp,
         block_height,
+        block_hash,
         new_owner: Some(
           Address::from_script(
             &tx
