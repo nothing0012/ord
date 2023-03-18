@@ -428,6 +428,7 @@ impl Updater {
       &mut sat_to_inscription_id,
       &mut satpoint_to_inscription_id,
       block.header.time,
+      block.header.block_hash(),
       value_cache,
     )?;
 
