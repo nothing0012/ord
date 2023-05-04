@@ -401,9 +401,12 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 mod stream {
   use crate::inscription::TransactionInscription;
   use crate::subcommand::traits::Output;
+  use base64::{
+    engine::general_purpose,
+    Engine as _,
+  };
 
   use super::*;
-  use base64::encode;
   use rdkafka::{
     config::FromClientConfig,
     producer::{BaseProducer, BaseRecord, Producer},
@@ -548,7 +551,7 @@ mod stream {
             .parse::<usize>()
             .unwrap();
           if inscription.media() == Media::Text && body.len() < kafka_body_max_bytes {
-            Some(encode::<&[u8]>(body))
+            Some(general_purpose::STANDARD.encode(body))
           } else {
             None
           }
