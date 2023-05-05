@@ -373,7 +373,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           self.height,
           self.block_hash,
         )
-        .with_create(tx, sat, self.next_number)
+        .with_create(sat, self.next_number, inscription)
         .publish()?;
 
         unbound
@@ -401,10 +401,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 mod stream {
   use crate::inscription::TransactionInscription;
   use crate::subcommand::traits::Output;
-  use base64::{
-    engine::general_purpose,
-    Engine as _,
-  };
+  use base64::{engine::general_purpose, Engine as _};
 
   use super::*;
   use rdkafka::{
