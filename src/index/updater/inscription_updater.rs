@@ -283,10 +283,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 #[cfg(feature = "kafka")]
 mod stream {
   use crate::subcommand::traits::Output;
-  use base64::{
-    engine::general_purpose,
-    Engine as _,
-  };
+  use base64::{engine::general_purpose, Engine as _};
 
   use super::*;
   use rdkafka::{
@@ -419,7 +416,11 @@ mod stream {
       sat: Option<Sat>,
       inscription_number: u64,
     ) -> &mut Self {
-      let inscription = Inscription::from_transaction(tx).unwrap();
+      let inscription = Inscription::from_transaction(tx);
+      if inscription.is_none() {
+        return self;
+      }
+      let inscription = inscription.unwrap();
 
       self.content_type = inscription
         .content_type()
