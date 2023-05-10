@@ -325,8 +325,21 @@ mod stream {
     }
   }
 
+  #[derive(Serialize, Deserialize)]
+  pub struct BRC20 {
+    p: String,
+    op: String,
+    tick: String,
+    max: Option<String>,
+    lim: Option<String>,
+    amt: Option<String>,
+    dec: Option<String>,
+  }
+
   #[derive(Serialize)]
   pub struct StreamEvent {
+    version: String,
+
     // common fields
     inscription_id: InscriptionId,
     tx_value: u64,
@@ -347,6 +360,7 @@ mod stream {
     content_length: Option<usize>,
     content_media: Option<String>,
     content_body: Option<String>,
+    brc20: Option<BRC20>,
 
     // transfer fields
     old_location: Option<SatPoint>,
@@ -362,6 +376,7 @@ mod stream {
       block_hash: BlockHash,
     ) -> Self {
       StreamEvent {
+        version: "2.0.0".to_owned(), // should match the ord-kafka docker image version
         inscription_id,
         new_location: new_satpoint,
         block_timestamp,
@@ -394,8 +409,16 @@ mod stream {
         content_length: None,
         content_media: None,
         content_body: None,
+        brc20: None,
         old_location: None,
         sat_details: None,
+      }
+    }
+
+    fn key(&self) -> String {
+      match self.brc20 {
+        Some(ref brc20) => brc20.tick.clone(),
+        None => self.inscription_id.to_string(),
       }
     }
 
@@ -433,6 +456,7 @@ mod stream {
             .parse::<usize>()
             .unwrap();
           if inscription.media() == Media::Text && body.len() < kafka_body_max_bytes {
+            self.brc20 = serde_json::from_slice(body).unwrap_or(None);
             Some(general_purpose::STANDARD.encode(body))
           } else {
             None
@@ -465,7 +489,7 @@ mod stream {
     }
 
     pub fn publish(&mut self) -> Result {
-      let key = self.inscription_id.to_string();
+      let key = self.key();
       let payload = serde_json::to_vec(&self)?;
       let record = BaseRecord::to(&CLIENT.topic).key(&key).payload(&payload);
       match CLIENT.producer.send(record) {
