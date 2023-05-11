@@ -406,7 +406,7 @@ mod stream {
   use super::*;
   use rdkafka::{
     config::FromClientConfig,
-    producer::{BaseProducer, BaseRecord, Producer},
+    producer::{BaseRecord, DefaultProducerContext, ThreadedProducer},
     ClientConfig,
   };
   use std::env;
@@ -417,14 +417,14 @@ mod stream {
   }
 
   struct StreamClient {
-    producer: BaseProducer,
+    producer: ThreadedProducer<DefaultProducerContext>,
     topic: String,
   }
 
   impl StreamClient {
     fn new() -> Self {
       StreamClient {
-        producer: BaseProducer::from_config(
+        producer: ThreadedProducer::from_config(
           ClientConfig::new()
             .set(
               "bootstrap.servers",
@@ -587,13 +587,6 @@ mod stream {
         Ok(_) => Ok(()),
         Err((e, _)) => Err(anyhow!("failed to send kafka message: {}", e)),
       }?;
-      CLIENT.producer.poll(Duration::from_secs(5));
-      if CLIENT.producer.in_flight_count() > 0 {
-        match CLIENT.producer.flush(Duration::from_secs(30)) {
-          Ok(_) => Ok(()),
-          Err(e) => Err(anyhow!("failed to flush kafka message: {}", e)),
-        }?;
-      };
       println!("{}", serde_json::to_string(&self)?);
       Ok(())
     }
