@@ -188,11 +188,20 @@ impl Updater {
 
     let first_inscription_height = index.first_inscription_height;
 
+    let target_height_limit = client.get_block_count()?
+      - env::var("BLOCKS_BEHIND")
+        .ok()
+        .and_then(|blocks_behind| blocks_behind.parse().ok())
+        .unwrap_or(0);
+
     thread::spawn(move || loop {
       if let Some(height_limit) = height_limit {
         if height >= height_limit {
           break;
         }
+      }
+      if height >= target_height_limit {
+        break;
       }
 
       match Self::get_block_with_retries(&client, height, index_sats, first_inscription_height) {
