@@ -200,7 +200,7 @@ impl Updater {
           break;
         }
       }
-      if height >= target_height_limit {
+      if height > target_height_limit {
         break;
       }
 
