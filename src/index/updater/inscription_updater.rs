@@ -338,6 +338,68 @@ mod stream {
     dec: Option<String>,
   }
 
+  #[derive(Serialize, Deserialize)]
+  pub struct DomainDotSats {
+    p: String,
+    op: String,
+    name: String,
+  }
+
+  impl DomainDotSats {
+    pub fn parse(body: &[u8]) -> Option<Self> {
+      if let Some(name) = Self::validate_string(body).ok() {
+        return Some(DomainDotSats {
+          name,
+          p: "sns".to_owned(),
+          op: "reg".to_owned(),
+        });
+      }
+
+      if let Some(data) = serde_json::from_slice::<DomainDotSats>(body).ok() {
+        if data.p != "sns" || data.op != "reg" {
+          return None;
+        }
+        if Self::validate_string(data.name.as_bytes()).is_ok() {
+          return Some(data);
+        }
+      }
+
+      None
+    }
+
+    pub fn validate_string(input: &[u8]) -> Result<String, &'static str> {
+      // Convert &[u8] to &str
+      let str_input = match std::str::from_utf8(input) {
+        Ok(v) => v,
+        Err(_) => return Err("Invalid UTF-8 data"),
+      };
+
+      // Turn the string into lowercase
+      let mut lower = str_input.to_lowercase();
+
+      // Delete everything after the first whitespace or newline (\n)
+      if let Some(end) = lower.find(|c: char| c.is_whitespace()) {
+        lower.truncate(end);
+      }
+
+      // Trim all whitespace and newlines
+      let trimmed = lower.trim();
+
+      // Validate that there is only one period (.) in the name
+      let period_count = trimmed.matches('.').count();
+      if period_count != 1 {
+        return Err("There should be exactly one period (.) in the name");
+      }
+
+      // Validate that the string ends with .sats
+      if !trimmed.ends_with(".sats") {
+        return Err("The string should end with .sats");
+      }
+
+      Ok(trimmed.to_string())
+    }
+  }
+
   #[derive(Serialize)]
   pub struct StreamEvent {
     version: String,
@@ -362,7 +424,10 @@ mod stream {
     content_length: Option<usize>,
     content_media: Option<String>,
     content_body: Option<String>,
+
+    // plugins
     brc20: Option<BRC20>,
+    domain_dot_sats: Option<DomainDotSats>,
 
     // transfer fields
     old_location: Option<SatPoint>,
@@ -412,16 +477,20 @@ mod stream {
         content_media: None,
         content_body: None,
         brc20: None,
+        domain_dot_sats: None,
         old_location: None,
         sat_details: None,
       }
     }
 
     fn key(&self) -> String {
-      match self.brc20 {
-        Some(ref brc20) => brc20.tick.clone(),
-        None => self.inscription_id.to_string(),
+      if let Some(brc20) = &self.brc20 {
+        return brc20.tick.clone();
       }
+      if let Some(domain_dot_sats) = &self.domain_dot_sats {
+        return domain_dot_sats.name.clone();
+      }
+      self.inscription_id.to_string()
     }
 
     fn get_network() -> Network {
@@ -459,6 +528,7 @@ mod stream {
             .unwrap();
           if inscription.media() == Media::Text && body.len() < kafka_body_max_bytes {
             self.brc20 = serde_json::from_slice(body).unwrap_or(None);
+            self.domain_dot_sats = DomainDotSats::parse(body);
             Some(general_purpose::STANDARD.encode(body))
           } else {
             None
