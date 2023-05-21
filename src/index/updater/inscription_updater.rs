@@ -465,7 +465,7 @@ mod stream {
 
   impl DomainDotSats {
     pub fn parse(body: &[u8]) -> Option<Self> {
-      if let Some(name) = Self::validate_string(body).ok() {
+      if let Ok(name) = Self::validate_string(body) {
         return Some(DomainDotSats {
           name,
           p: "sns".to_owned(),
@@ -473,7 +473,7 @@ mod stream {
         });
       }
 
-      if let Some(data) = serde_json::from_slice::<DomainDotSats>(body).ok() {
+      if let Ok(data) = serde_json::from_slice::<DomainDotSats>(body) {
         if data.p != "sns" || data.op != "reg" {
           return None;
         }
