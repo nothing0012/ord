@@ -339,23 +339,23 @@ mod stream {
   }
 
   #[derive(Serialize, Deserialize)]
-  pub struct DomainDotSats {
+  pub struct Domain {
     p: String,
     op: String,
     name: String,
   }
 
-  impl DomainDotSats {
+  impl Domain {
     pub fn parse(body: &[u8]) -> Option<Self> {
       if let Ok(name) = Self::validate_string(body) {
-        return Some(DomainDotSats {
+        return Some(Domain {
           name,
           p: "sns".to_owned(),
           op: "reg".to_owned(),
         });
       }
 
-      if let Ok(data) = serde_json::from_slice::<DomainDotSats>(body) {
+      if let Ok(data) = serde_json::from_slice::<Domain>(body) {
         if data.p != "sns" || data.op != "reg" {
           return None;
         }
@@ -391,11 +391,6 @@ mod stream {
         return Err("There should be exactly one period (.) in the name");
       }
 
-      // Validate that the string ends with .sats
-      if !trimmed.ends_with(".sats") {
-        return Err("The string should end with .sats");
-      }
-
       Ok(trimmed.to_string())
     }
   }
@@ -427,7 +422,7 @@ mod stream {
 
     // plugins
     brc20: Option<BRC20>,
-    domain_dot_sats: Option<DomainDotSats>,
+    domain: Option<Domain>,
 
     // transfer fields
     old_location: Option<SatPoint>,
@@ -477,7 +472,7 @@ mod stream {
         content_media: None,
         content_body: None,
         brc20: None,
-        domain_dot_sats: None,
+        domain: None,
         old_location: None,
         sat_details: None,
       }
@@ -487,8 +482,8 @@ mod stream {
       if let Some(brc20) = &self.brc20 {
         return brc20.tick.clone();
       }
-      if let Some(domain_dot_sats) = &self.domain_dot_sats {
-        return domain_dot_sats.name.clone();
+      if let Some(domain) = &self.domain {
+        return domain.name.clone();
       }
       self.inscription_id.to_string()
     }
@@ -528,7 +523,7 @@ mod stream {
             .unwrap();
           if inscription.media() == Media::Text && body.len() < kafka_body_max_bytes {
             self.brc20 = serde_json::from_slice(body).unwrap_or(None);
-            self.domain_dot_sats = DomainDotSats::parse(body);
+            self.domain = Domain::parse(body);
             Some(general_purpose::STANDARD.encode(body))
           } else {
             None
