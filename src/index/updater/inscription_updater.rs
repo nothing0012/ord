@@ -96,6 +96,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     &mut self,
     tx: &Transaction,
     txid: Txid,
+    tx_block_index: usize,
     input_sat_ranges: Option<&VecDeque<(u64, u64)>>,
   ) -> Result {
     let mut new_inscriptions = Inscription::from_transaction(tx).into_iter().peekable();
@@ -260,6 +261,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           inscriptions.next().unwrap(),
           new_satpoint,
           tx,
+          tx_block_index,
         )?;
       }
 
@@ -280,7 +282,13 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           outpoint: OutPoint::null(),
           offset: self.lost_sats + flotsam.offset - output_value,
         };
-        self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint, tx)?;
+        self.update_inscription_location(
+          input_sat_ranges,
+          flotsam,
+          new_satpoint,
+          tx,
+          tx_block_index,
+        )?;
       }
       self.lost_sats += self.reward - output_value;
       Ok(())
@@ -300,6 +308,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     flotsam: Flotsam,
     new_satpoint: SatPoint,
     #[allow(unused_variables)] tx: &Transaction,
+    #[allow(unused_variables)] tx_block_index: usize,
   ) -> Result {
     let inscription_id = flotsam.inscription_id.store();
     let unbound = match flotsam.origin {
@@ -307,6 +316,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         self.satpoint_to_id.remove(&old_satpoint.store())?;
         StreamEvent::new(
           tx,
+          tx_block_index,
           flotsam.inscription_id,
           new_satpoint,
           self.timestamp,
@@ -367,13 +377,14 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 
         StreamEvent::new(
           tx,
+          tx_block_index,
           flotsam.inscription_id,
           new_satpoint,
           self.timestamp,
           self.height,
           self.block_hash,
         )
-        .with_create(sat, self.next_number, inscription)
+        .with_create(sat, number, inscription)
         .publish()?;
 
         unbound
@@ -523,12 +534,13 @@ mod stream {
 
     // common fields
     inscription_id: InscriptionId,
-    tx_value: u64,
-    tx_id: String,
     new_location: SatPoint,
     new_owner: Option<Address>,
     new_output_value: u64,
 
+    tx_id: String,
+    tx_value: u64,
+    tx_block_index: usize,
     block_timestamp: u32,
     block_height: u64,
     block_hash: BlockHash,
@@ -553,6 +565,7 @@ mod stream {
   impl StreamEvent {
     pub fn new(
       tx: &Transaction,
+      tx_block_index: usize,
       inscription_id: InscriptionId,
       new_satpoint: SatPoint,
       block_timestamp: u32,
@@ -587,6 +600,7 @@ mod stream {
           .value,
         tx_value: tx.output.iter().map(|txout: &TxOut| txout.value).sum(),
         tx_id: tx.txid().to_string(),
+        tx_block_index,
         sat: None,
         inscription_number: None,
         content_type: None,
