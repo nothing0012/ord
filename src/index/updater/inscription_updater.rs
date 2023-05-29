@@ -391,6 +391,10 @@ mod stream {
         return Err("There should be exactly one period (.) in the name");
       }
 
+      if trimmed.ends_with("}") {
+        return Err("The name should not end with a curly brace (})");
+      }
+
       Ok(trimmed.to_string())
     }
   }
