@@ -454,6 +454,7 @@ impl Updater {
         self.sat_ranges_since_flush += 1;
       }
 
+      let mut tx_block_index = 0;
       for (tx_offset, (tx, txid)) in block.txdata.iter().enumerate().skip(1) {
         log::trace!("Indexing transaction {tx_offset}…");
 
@@ -482,6 +483,7 @@ impl Updater {
         self.index_transaction_sats(
           tx,
           *txid,
+          tx_block_index,
           &mut sat_to_satpoint,
           &mut input_sat_ranges,
           &mut sat_ranges_written,
@@ -489,6 +491,7 @@ impl Updater {
           &mut inscription_updater,
           index_inscriptions,
         )?;
+        tx_block_index += 1;
 
         coinbase_inputs.extend(input_sat_ranges);
       }
@@ -497,6 +500,7 @@ impl Updater {
         self.index_transaction_sats(
           tx,
           *txid,
+          tx_block_index,
           &mut sat_to_satpoint,
           &mut coinbase_inputs,
           &mut sat_ranges_written,
@@ -532,8 +536,8 @@ impl Updater {
         outpoint_to_sat_ranges.insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
       }
     } else {
-      for (tx, txid) in block.txdata.iter().skip(1).chain(block.txdata.first()) {
-        lost_sats += inscription_updater.index_transaction_inscriptions(tx, *txid, None)?;
+      for (tx_block_index, (tx, txid)) in block.txdata.iter().skip(1).chain(block.txdata.first()).enumerate() {
+        lost_sats += inscription_updater.index_transaction_inscriptions(tx, *txid, tx_block_index, None)?;
       }
     }
 
@@ -556,6 +560,7 @@ impl Updater {
     &mut self,
     tx: &Transaction,
     txid: Txid,
+    tx_block_index: usize,
     sat_to_satpoint: &mut Table<u64, &SatPointValue>,
     input_sat_ranges: &mut VecDeque<(u64, u64)>,
     sat_ranges_written: &mut u64,
@@ -564,7 +569,7 @@ impl Updater {
     index_inscriptions: bool,
   ) -> Result {
     if index_inscriptions {
-      inscription_updater.index_transaction_inscriptions(tx, txid, Some(input_sat_ranges))?;
+      inscription_updater.index_transaction_inscriptions(tx, txid, tx_block_index, Some(input_sat_ranges))?;
     }
 
     for (vout, output) in tx.output.iter().enumerate() {
