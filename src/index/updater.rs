@@ -542,7 +542,13 @@ impl Updater {
         outpoint_to_sat_ranges.insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
       }
     } else {
-      for (tx_block_index, (tx, txid)) in block.txdata.iter().skip(1).chain(block.txdata.first()).enumerate() {
+      for (tx_block_index, (tx, txid)) in block
+        .txdata
+        .iter()
+        .skip(1)
+        .chain(block.txdata.first())
+        .enumerate()
+      {
         inscription_updater.index_transaction_inscriptions(tx, *txid, tx_block_index, None)?;
       }
     }
@@ -580,7 +586,12 @@ impl Updater {
     index_inscriptions: bool,
   ) -> Result {
     if index_inscriptions {
-      inscription_updater.index_transaction_inscriptions(tx, txid, tx_block_index, Some(input_sat_ranges))?;
+      inscription_updater.index_transaction_inscriptions(
+        tx,
+        txid,
+        tx_block_index,
+        Some(input_sat_ranges),
+      )?;
     }
 
     for (vout, output) in tx.output.iter().enumerate() {

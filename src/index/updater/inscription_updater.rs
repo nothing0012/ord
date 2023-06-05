@@ -307,8 +307,8 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     input_sat_ranges: Option<&VecDeque<(u64, u64)>>,
     flotsam: Flotsam,
     new_satpoint: SatPoint,
-    #[allow(unused_variables)] tx: &Transaction,
-    #[allow(unused_variables)] tx_block_index: usize,
+    tx: &Transaction,
+    tx_block_index: usize,
   ) -> Result {
     let inscription_id = flotsam.inscription_id.store();
     let unbound = match flotsam.origin {
@@ -379,7 +379,13 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           tx,
           tx_block_index,
           flotsam.inscription_id,
-          new_satpoint,
+          match unbound {
+            true => SatPoint {
+              outpoint: unbound_outpoint(),
+              offset: self.unbound_inscriptions,
+            },
+            false => new_satpoint,
+          },
           self.timestamp,
           self.height,
           self.block_hash,
@@ -520,7 +526,7 @@ mod stream {
         return Err("There should be exactly one period (.) in the name");
       }
 
-      if trimmed.ends_with("}") {
+      if trimmed.ends_with('}') {
         return Err("The name should not end with a curly brace (})");
       }
 
@@ -575,10 +581,10 @@ mod stream {
       StreamEvent {
         version: "2.0.0".to_owned(), // should match the ord-kafka docker image version
         inscription_id,
-        new_location: new_satpoint,
         block_timestamp,
         block_height,
         block_hash,
+        new_location: new_satpoint,
         new_owner: Some(
           Address::from_script(
             &tx
