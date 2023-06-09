@@ -658,7 +658,16 @@ mod stream {
             .unwrap_or("950000".to_owned())
             .parse::<usize>()
             .unwrap();
-          if inscription.media() == Media::Text && body.len() < kafka_body_max_bytes {
+
+          // Text Media and Content-Type starting with "text/" are included with the content-body payload
+          let is_text = inscription.media() == Media::Text
+            || self
+              .content_type
+              .clone()
+              .map(|ct| ct.starts_with("text/"))
+              .unwrap_or(false);
+
+          if is_text && body.len() < kafka_body_max_bytes {
             self.brc20 = serde_json::from_slice(body).unwrap_or(None);
             self.domain = Domain::parse(body);
             Some(general_purpose::STANDARD.encode(body))
