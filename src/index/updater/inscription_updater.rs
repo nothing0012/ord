@@ -621,12 +621,6 @@ mod stream {
     }
 
     fn key(&self) -> String {
-      if let Some(brc20) = &self.brc20 {
-        return brc20.tick.clone();
-      }
-      if let Some(domain) = &self.domain {
-        return domain.name.clone();
-      }
       self.inscription_id.to_string()
     }
 
