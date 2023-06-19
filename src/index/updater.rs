@@ -496,6 +496,7 @@ impl Updater {
           &mut outputs_in_block,
           &mut inscription_updater,
           index_inscriptions,
+          index,
         )?;
         tx_block_index += 1;
 
@@ -513,6 +514,7 @@ impl Updater {
           &mut outputs_in_block,
           &mut inscription_updater,
           index_inscriptions,
+          index,
         )?;
       }
 
@@ -549,7 +551,13 @@ impl Updater {
         .chain(block.txdata.first())
         .enumerate()
       {
-        inscription_updater.index_transaction_inscriptions(tx, *txid, tx_block_index, None)?;
+        inscription_updater.index_transaction_inscriptions(
+          tx,
+          *txid,
+          tx_block_index,
+          None,
+          index,
+        )?;
       }
     }
 
@@ -584,6 +592,7 @@ impl Updater {
     outputs_traversed: &mut u64,
     inscription_updater: &mut InscriptionUpdater,
     index_inscriptions: bool,
+    index: &Index,
   ) -> Result {
     if index_inscriptions {
       inscription_updater.index_transaction_inscriptions(
@@ -591,6 +600,7 @@ impl Updater {
         txid,
         tx_block_index,
         Some(input_sat_ranges),
+        index,
       )?;
     }
 

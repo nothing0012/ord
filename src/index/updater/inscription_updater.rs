@@ -98,6 +98,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     txid: Txid,
     tx_block_index: usize,
     input_sat_ranges: Option<&VecDeque<(u64, u64)>>,
+    index: &Index,
   ) -> Result {
     let mut new_inscriptions = Inscription::from_transaction(tx).into_iter().peekable();
     let mut floating_inscriptions = Vec::new();
@@ -262,6 +263,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           new_satpoint,
           tx,
           tx_block_index,
+          index,
         )?;
       }
 
@@ -288,6 +290,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           new_satpoint,
           tx,
           tx_block_index,
+          index,
         )?;
       }
       self.lost_sats += self.reward - output_value;
@@ -309,6 +312,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     new_satpoint: SatPoint,
     tx: &Transaction,
     tx_block_index: usize,
+    index: &Index,
   ) -> Result {
     let inscription_id = flotsam.inscription_id.store();
     let unbound = match flotsam.origin {
@@ -323,7 +327,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           self.height,
           self.block_hash,
         )
-        .with_transfer(old_satpoint)
+        .with_transfer(old_satpoint, index)
         .publish()?;
 
         false
@@ -621,6 +625,12 @@ mod stream {
     }
 
     fn key(&self) -> String {
+      if let Some(brc20) = &self.brc20 {
+        return brc20.tick.clone();
+      }
+      if let Some(domain) = &self.domain {
+        return domain.name.clone();
+      }
       self.inscription_id.to_string()
     }
 
@@ -628,18 +638,7 @@ mod stream {
       Network::from_str(&env::var("NETWORK").unwrap_or("bitcoin".to_owned())).unwrap()
     }
 
-    pub fn with_transfer(&mut self, old_satpoint: SatPoint) -> &mut Self {
-      self.old_location = Some(old_satpoint);
-      self
-    }
-
-    pub(crate) fn with_create(
-      &mut self,
-      sat: Option<Sat>,
-      inscription_number: i64,
-      inscription: TransactionInscription,
-    ) -> &mut Self {
-      let inscription = inscription.inscription;
+    fn enrich_content(&mut self, inscription: Inscription) -> &mut Self {
       self.content_type = inscription
         .content_type()
         .map(|content_type| content_type.to_string());
@@ -671,7 +670,28 @@ mod stream {
         }
         None => None,
       };
+      self
+    }
 
+    pub(crate) fn with_transfer(&mut self, old_satpoint: SatPoint, index: &Index) -> &mut Self {
+      self.old_location = Some(old_satpoint);
+      let inscription = index
+        .get_inscription_by_id(self.inscription_id)
+        .unwrap()
+        .unwrap();
+      self.enrich_content(inscription);
+      self
+    }
+
+    pub(crate) fn with_create(
+      &mut self,
+      sat: Option<Sat>,
+      inscription_number: i64,
+      inscription: TransactionInscription,
+    ) -> &mut Self {
+      let inscription = inscription.inscription;
+
+      self.enrich_content(inscription);
       self.sat = sat;
       self.inscription_number = Some(inscription_number);
       self.sat_details = match self.sat {
