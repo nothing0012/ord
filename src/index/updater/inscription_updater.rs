@@ -317,7 +317,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     let inscription_id = flotsam.inscription_id.store();
     let unbound = match flotsam.origin {
       Origin::Old { old_satpoint } => {
-        self.satpoint_to_id.remove(&old_satpoint.store())?;
         StreamEvent::new(
           tx,
           tx_block_index,
@@ -330,6 +329,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         .with_transfer(old_satpoint, index)
         .publish()?;
 
+        self.satpoint_to_id.remove(&old_satpoint.store())?;
         false
       }
       Origin::New {
@@ -675,11 +675,12 @@ mod stream {
 
     pub(crate) fn with_transfer(&mut self, old_satpoint: SatPoint, index: &Index) -> &mut Self {
       self.old_location = Some(old_satpoint);
-      let inscription = index
-        .get_inscription_by_id(self.inscription_id)
-        .unwrap()
-        .unwrap();
-      self.enrich_content(inscription);
+      if let Some(inscription) = index
+        .get_inscription_by_id_unsafe(self.inscription_id)
+        .unwrap_or_else(|_| panic!("Inscription should exist: {}", self.inscription_id))
+      {
+        self.enrich_content(inscription);
+      };
       self
     }
 
