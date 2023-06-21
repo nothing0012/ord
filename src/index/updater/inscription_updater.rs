@@ -626,10 +626,10 @@ mod stream {
 
     fn key(&self) -> String {
       if let Some(brc20) = &self.brc20 {
-        return brc20.tick.clone();
+        return brc20.tick.clone().to_lowercase();
       }
       if let Some(domain) = &self.domain {
-        return domain.name.clone();
+        return domain.name.clone().to_lowercase();
       }
       self.inscription_id.to_string()
     }
