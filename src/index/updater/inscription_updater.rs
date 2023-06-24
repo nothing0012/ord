@@ -657,7 +657,7 @@ mod stream {
             || self
               .content_type
               .clone()
-              .map(|ct| ct.starts_with("text/"))
+              .map(|ct| ct.starts_with("text/") || ct.starts_with("image/svg"))
               .unwrap_or(false);
 
           if is_text && body.len() < kafka_body_max_bytes {
