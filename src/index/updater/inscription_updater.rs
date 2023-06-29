@@ -571,6 +571,7 @@ mod stream {
 
     // transfer fields
     old_location: Option<SatPoint>,
+    old_owner: Option<Address>,
   }
 
   impl StreamEvent {
@@ -622,6 +623,7 @@ mod stream {
         brc20: None,
         domain: None,
         old_location: None,
+        old_owner: None,
         sat_details: None,
       }
     }
@@ -682,6 +684,21 @@ mod stream {
         .unwrap_or_else(|_| panic!("Inscription should exist: {}", self.inscription_id))
       {
         self.enrich_content(inscription);
+        let old_owner: Option<Address> = index
+          .get_transaction(old_satpoint.outpoint.txid)
+          .unwrap_or(None)
+          .and_then(|tx| {
+            Address::from_script(
+              &tx
+                .output
+                .get(old_satpoint.outpoint.vout as usize)
+                .unwrap_or(&TxOut::default())
+                .script_pubkey,
+              StreamEvent::get_network(),
+            )
+            .ok()
+          });
+        self.old_owner = old_owner;
       };
       self
     }
