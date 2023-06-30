@@ -585,7 +585,7 @@ mod stream {
       block_hash: BlockHash,
     ) -> Self {
       StreamEvent {
-        version: "4.0.2".to_owned(), // should match the ord-kafka docker image version
+        version: "4.0.0".to_owned(), // should match the ord-kafka docker image version
         inscription_id,
         block_timestamp,
         block_height,
