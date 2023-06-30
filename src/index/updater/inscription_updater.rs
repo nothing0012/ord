@@ -585,7 +585,7 @@ mod stream {
       block_hash: BlockHash,
     ) -> Self {
       StreamEvent {
-        version: "4.0.0".to_owned(), // should match the ord-kafka docker image version
+        version: "4.0.2".to_owned(), // should match the ord-kafka docker image version
         inscription_id,
         block_timestamp,
         block_height,
@@ -684,21 +684,23 @@ mod stream {
         .unwrap_or_else(|_| panic!("Inscription should exist: {}", self.inscription_id))
       {
         self.enrich_content(inscription);
-        let old_owner: Option<Address> = index
+        self.old_owner = index
           .get_transaction(old_satpoint.outpoint.txid)
           .unwrap_or(None)
           .and_then(|tx| {
-            Address::from_script(
-              &tx
-                .output
-                .get(old_satpoint.outpoint.vout as usize)
-                .unwrap_or(&TxOut::default())
-                .script_pubkey,
-              StreamEvent::get_network(),
-            )
-            .ok()
+            tx.output
+              .get(old_satpoint.outpoint.vout as usize)
+              .and_then(|txout| {
+                Address::from_script(&txout.script_pubkey, StreamEvent::get_network())
+                  .map_err(|e| {
+                    log::error!(
+                      "StreamEvent::with_transfer could not parse old_owner address: {}",
+                      e
+                    );
+                  })
+                  .ok()
+              })
           });
-        self.old_owner = old_owner;
       };
       self
     }
