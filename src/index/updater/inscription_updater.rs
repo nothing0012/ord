@@ -821,6 +821,9 @@ mod stream {
     }
 
     pub fn publish(&mut self) -> Result {
+      if env::var("KAFKA_TOPIC").is_err() {
+        return Ok(());
+      }
       let key = self.key();
       let payload = serde_json::to_vec(&self)?;
       let record = BaseRecord::to(&CLIENT.topic).key(&key).payload(&payload);
