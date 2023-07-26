@@ -1,6 +1,6 @@
-use {super::*, inscription::Curse};
 use self::stream::StreamEvent;
 use crate::inscription::TransactionInscription;
+use {super::*, inscription::Curse};
 
 #[derive(Debug, Clone)]
 pub(super) struct Flotsam {
@@ -704,11 +704,14 @@ mod stream {
     }
 
     fn key(&self) -> String {
+      if let Ok(kafka_topic) = env::var("KAFKA_TOPIC") {
+        if !kafka_topic.to_lowercase().contains("brc20") {
+          return self.inscription_id.to_string();
+        }
+      }
+
       if let Some(brc20) = &self.brc20 {
         return brc20.tick.clone().to_lowercase();
-      }
-      if let Some(domain) = &self.domain {
-        return domain.name.clone().to_lowercase();
       }
       self.inscription_id.to_string()
     }
