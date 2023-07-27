@@ -1,3 +1,5 @@
+use axum::routing::post;
+
 use {
   self::{
     deserialize_from_str::DeserializeFromStr,
@@ -179,7 +181,7 @@ impl Server {
         .route("/tx/:txid", get(Self::transaction))
 
         // API routes
-        .route("/rpc/v1", get(rpc::handler))
+        .route("/rpc/v1", post(rpc::handler))
 
         .layer(Extension(index))
         .layer(Extension(page_config))
