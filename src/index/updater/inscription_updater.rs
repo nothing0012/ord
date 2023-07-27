@@ -75,7 +75,8 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 
     let next_number = number_to_id
       .iter()?
-      .next_back()
+      .rev()
+      .next()
       .and_then(|result| result.ok())
       .map(|(number, _id)| number.value() + 1)
       .unwrap_or(0);
@@ -177,7 +178,14 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         } else if inscription.tx_in_offset != 0 {
           Some(Curse::NotAtOffsetZero)
         } else if inscribed_offsets.contains_key(&offset) {
-          let seq_num = self.reinscription_id_to_seq_num.len()?;
+          let seq_num = self
+            .reinscription_id_to_seq_num
+            .iter()?
+            .rev()
+            .next()
+            .and_then(|result| result.ok())
+            .map(|(_id, number)| number.value() + 1)
+            .unwrap_or(0);
 
           let sat = Self::calculate_sat(input_sat_ranges, offset);
           log::info!("processing reinscription {inscription_id} on sat {:?}: sequence number {seq_num}, inscribed offsets {:?}", sat, inscribed_offsets);
@@ -675,14 +683,14 @@ mod stream {
               .script_pubkey,
             StreamEvent::get_network(),
           )
-          .unwrap_or(Address::p2sh(&Script::default(), StreamEvent::get_network()).unwrap()),
+          .unwrap_or(Address::p2sh(&ScriptBuf::default(), StreamEvent::get_network()).unwrap()),
         ),
         new_output_value: tx
           .output
           .get(new_satpoint.outpoint.vout as usize)
           .unwrap_or(&TxOut {
             value: 0,
-            script_pubkey: Script::new(),
+            script_pubkey: ScriptBuf::new(),
           })
           .value,
         tx_value: tx.output.iter().map(|txout: &TxOut| txout.value).sum(),
