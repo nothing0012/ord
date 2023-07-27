@@ -33,19 +33,19 @@ async fn get_health(value: JsonRpcExtractor) -> JrpcResult {
 async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResult {
   #[derive(Deserialize)]
   struct Req {
-    outputs: Vec<String>,
+    utxos: Vec<String>,
   }
 
   #[derive(Serialize)]
   struct SatRange {
-    output: String,
+    utxo: String,
     start: u64,
     end: u64,
   }
 
   #[derive(Serialize)]
   struct RareSat {
-    output: String,
+    utxo: String,
     offset: u64,
     rarity: Rarity,
     sat: Sat,
@@ -67,7 +67,7 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
   let mut res = Res { sat_ranges: vec![], rare_sats: vec![] };
   let mut utxos: Vec<(OutPoint, Vec<(u64, u64)>)> = vec![];
 
-  for output in req.outputs {
+  for output in req.utxos {
     let outpoint = match OutPoint::from_str(output.as_str()) {
       Ok(outpoint) => outpoint,
       Err(err) => return invalid_params(answer_id, err.to_string()),
@@ -83,7 +83,7 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
         List::Unspent(ranges) => {
           for range in ranges {
             res.sat_ranges.push(SatRange {
-              output: output.clone(),
+              utxo: output.clone(),
               start: range.0,
               end: range.1,
             });
@@ -110,7 +110,7 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
       rarity: sat.rarity(),
     };
     res.rare_sats.push(RareSat {
-      output: outpoint.to_string(),
+      utxo: outpoint.to_string(),
       offset,
       rarity,
       sat,
