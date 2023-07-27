@@ -37,6 +37,7 @@ use {
 };
 
 mod error;
+mod rpc;
 
 enum BlockQuery {
   Height(u64),
@@ -176,6 +177,10 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
+
+        // API routes
+        .route("/rpc/v1", get(rpc::handler))
+
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
