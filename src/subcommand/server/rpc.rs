@@ -1,3 +1,4 @@
+use crate::subcommand::{traits::Output as SatDetails, wallet::sats::rare_sats};
 use super::*;
 use axum_jrpc::{
   error::{JsonRpcError, JsonRpcErrorReason},
@@ -43,20 +44,28 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
   }
 
   #[derive(Serialize)]
+  struct RareSat {
+    output: String,
+    offset: u64,
+    rarity: Rarity,
+    sat: Sat,
+    sat_details: SatDetails,
+  }
+
+  #[derive(Serialize)]
   struct Res {
     sat_ranges: Vec<SatRange>,
+    rare_sats: Vec<RareSat>,
   }
 
   let answer_id = value.get_answer_id();
   if index.has_sat_index().is_err() {
-    return Ok(JsonRpcResponse::success(
-      answer_id,
-      Res { sat_ranges: vec![] },
-    ));
+    return invalid_params(answer_id, "Sat index is not available".to_string());
   }
 
   let req: Req = value.parse_params()?;
-  let mut res = Res { sat_ranges: vec![] };
+  let mut res = Res { sat_ranges: vec![], rare_sats: vec![] };
+  let mut utxos: Vec<(OutPoint, Vec<(u64, u64)>)> = vec![];
 
   for output in req.outputs {
     let outpoint = match OutPoint::from_str(output.as_str()) {
@@ -67,6 +76,7 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
       Ok(list) => list,
       Err(err) => return invalid_params(answer_id, err.to_string()),
     };
+    let mut sat_ranges = vec![];
     if let Some(list) = list {
       match list {
         List::Spent => {}
@@ -77,10 +87,35 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
               start: range.0,
               end: range.1,
             });
+            sat_ranges.push(range);
           }
         }
       }
     }
+    utxos.push((outpoint, sat_ranges));
+  }
+
+  let rare_sats = rare_sats(utxos);
+  for (outpoint, sat, offset, rarity) in rare_sats {
+    let sat_details = SatDetails {
+      number: sat.n(),
+      decimal: sat.decimal().to_string(),
+      degree: sat.degree().to_string(),
+      name: sat.name(),
+      height: sat.height().0,
+      cycle: sat.cycle(),
+      epoch: sat.epoch().0,
+      period: sat.period(),
+      offset: sat.third(),
+      rarity: sat.rarity(),
+    };
+    res.rare_sats.push(RareSat {
+      output: outpoint.to_string(),
+      offset,
+      rarity,
+      sat,
+      sat_details,
+    });
   }
 
   Ok(JsonRpcResponse::success(answer_id, res))
