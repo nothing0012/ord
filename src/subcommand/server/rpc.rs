@@ -1,15 +1,9 @@
-use crate::subcommand::{traits::Output as SatDetails, wallet::sats::rare_sats};
-use crate::block_rarity::{
-  BLOCK78_BLOCK_HEIGHT,
-  BLOCK9_BLOCK_HEIGHT,
-  FIRST_TRANSACTION_SAT_RANGE,
-  MAX_PIZZA_BLOCK_HEIGHT,
-  NAKAMOTO_BLOCK_HEIGHTS,
-  PIZZA_RANGE_MAP,
-  VINTAGE_BLOCK_HEIGHT,
-  is_palindrome,
-};
 use super::*;
+use crate::block_rarity::{
+  is_palindrome, BLOCK78_BLOCK_HEIGHT, BLOCK9_BLOCK_HEIGHT, FIRST_TRANSACTION_SAT_RANGE,
+  MAX_PIZZA_BLOCK_HEIGHT, NAKAMOTO_BLOCK_HEIGHTS, PIZZA_RANGE_MAP, VINTAGE_BLOCK_HEIGHT,
+};
+use crate::subcommand::{traits::Output as SatDetails, wallet::sats::rare_sats};
 use axum_jrpc::{
   error::{JsonRpcError, JsonRpcErrorReason},
   JrpcResult, JsonRpcExtractor, JsonRpcResponse,
@@ -117,7 +111,7 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
               utxo: output.clone(),
               start: range.0,
               end: range.1,
-              block_rarities: block_rarities,
+              block_rarities,
             });
             sat_ranges.push(range);
           }
@@ -160,7 +154,6 @@ fn get_block_rarities(start: u64, end: u64) -> Result<BlockRarities> {
   let mut pizza = 0;
   let mut block9 = 0;
   let mut block78 = 0;
-  let palindrome;
 
   let sat_start = Sat(start);
   let sat_end = Sat(end);
@@ -169,7 +162,9 @@ fn get_block_rarities(start: u64, end: u64) -> Result<BlockRarities> {
     return Err(anyhow!("invalid sat range: start {start} > end {end}"));
   }
   if sat_start.height().n() != sat_end.height().n() {
-    return Err(anyhow!("invalid sat range: start {start} and end {end} are in different blocks"));
+    return Err(anyhow!(
+      "invalid sat range: start {start} and end {end} are in different blocks"
+    ));
   }
 
   let block_height = sat_start.height().n();
@@ -179,7 +174,7 @@ fn get_block_rarities(start: u64, end: u64) -> Result<BlockRarities> {
     if block_height <= VINTAGE_BLOCK_HEIGHT {
       vintage += sat_end.n() - sat_start.n() + 1;
     }
-      
+
     if NAKAMOTO_BLOCK_HEIGHTS.contains(&block_height) {
       nakamoto += sat_end.n() - sat_start.n() + 1;
     }
@@ -187,7 +182,9 @@ fn get_block_rarities(start: u64, end: u64) -> Result<BlockRarities> {
     if block_height == BLOCK9_BLOCK_HEIGHT {
       block9 = sat_end.n() - sat_start.n() + 1;
       if sat_start.n() < FIRST_TRANSACTION_SAT_RANGE.1 {
-        first_transaction = min(FIRST_TRANSACTION_SAT_RANGE.1 - 1, sat_end.n()) - max(FIRST_TRANSACTION_SAT_RANGE.0, sat_start.n()) +1;
+        first_transaction = min(FIRST_TRANSACTION_SAT_RANGE.1 - 1, sat_end.n())
+          - max(FIRST_TRANSACTION_SAT_RANGE.0, sat_start.n())
+          + 1;
       }
     } else if block_height == BLOCK78_BLOCK_HEIGHT {
       block78 = sat_end.n() - sat_start.n() + 1;
@@ -195,29 +192,27 @@ fn get_block_rarities(start: u64, end: u64) -> Result<BlockRarities> {
 
     if PIZZA_RANGE_MAP.contains_key(&block_height) {
       let pizza_sat_ranges = PIZZA_RANGE_MAP.get(&block_height).unwrap();
-      pizza += count_pizza_sats_in_range(start, end, &pizza_sat_ranges);
+      pizza += count_pizza_sats_in_range(start, end, pizza_sat_ranges);
     }
   }
 
   // Assume sat ranges are not too large for most of the cases.
-  if sat_end.n() - sat_start.n() < 1_000_000 {
-    palindrome = count_palindrome_sats(sat_start.n(), sat_end.n());
+  let palindrome = if sat_end.n() - sat_start.n() < 1_000_000 {
+    count_palindrome_sats(sat_start.n(), sat_end.n())
   } else {
     // this is a rough estimate, but the result is mostly 0 because the palindrome becomes more sparse as the sat number increases.
-    palindrome = estimate_palindrome_sats(start, end);
-  }
+    estimate_palindrome_sats(start, end)
+  };
 
-  Ok(
-    BlockRarities {
-      vintage,
-      nakamoto,
-      first_transaction,
-      pizza,
-      block9,
-      block78,
-      palindrome,
-    }
-  )
+  Ok(BlockRarities {
+    vintage,
+    nakamoto,
+    first_transaction,
+    pizza,
+    block9,
+    block78,
+    palindrome,
+  })
 }
 
 fn count_palindrome_sats(start: u64, end: u64) -> u64 {
@@ -234,6 +229,7 @@ fn estimate_palindrome_sats(start: u64, end: u64) -> u64 {
   approximate_palindrome_count(end) - approximate_palindrome_count(start)
 }
 
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn approximate_palindrome_count(range: u64) -> u64 {
   let num_digits = (range as f64).log10().ceil() as u32;
   let half_digits = num_digits / 2;
@@ -300,16 +296,29 @@ mod tests {
     assert_eq!(count_palindrome_sats(0, 100_000), 1099);
     assert_eq!(count_palindrome_sats(0, 1_000_000), 1999);
 
-    assert_eq!(estimate_palindrome_sats(1_000 * COIN_VALUE, 1_000 * COIN_VALUE + 878_364), 0);
-    assert_eq!(count_palindrome_sats(1_000 * COIN_VALUE, 1_000 * COIN_VALUE + 878_364), 1);
+    assert_eq!(
+      estimate_palindrome_sats(1_000 * COIN_VALUE, 1_000 * COIN_VALUE + 878_364),
+      0
+    );
+    assert_eq!(
+      count_palindrome_sats(1_000 * COIN_VALUE, 1_000 * COIN_VALUE + 878_364),
+      1
+    );
 
-    assert_eq!(estimate_palindrome_sats(20_000_000 * COIN_VALUE, 20_000_000 * COIN_VALUE + 478_364), 0);
-    assert_eq!(count_palindrome_sats(20_000_000 * COIN_VALUE, 20_000_000 * COIN_VALUE + 478_364), 1);
+    assert_eq!(
+      estimate_palindrome_sats(20_000_000 * COIN_VALUE, 20_000_000 * COIN_VALUE + 478_364),
+      0
+    );
+    assert_eq!(
+      count_palindrome_sats(20_000_000 * COIN_VALUE, 20_000_000 * COIN_VALUE + 478_364),
+      1
+    );
   }
 
   #[test]
   fn test_get_block_rarities() {
-    let mut block_rarities = get_block_rarities(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000).unwrap();
+    let mut block_rarities =
+      get_block_rarities(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000).unwrap();
     assert_eq!(block_rarities.vintage, 20_001);
     assert_eq!(block_rarities.nakamoto, 20_001);
     assert_eq!(block_rarities.first_transaction, 10_000);
@@ -318,7 +327,8 @@ mod tests {
     assert_eq!(block_rarities.pizza, 0);
     assert_eq!(block_rarities.palindrome, 2);
 
-    block_rarities = get_block_rarities(78 * 50 * COIN_VALUE + 10_000, 78 * 50 * COIN_VALUE + 20_000).unwrap();
+    block_rarities =
+      get_block_rarities(78 * 50 * COIN_VALUE + 10_000, 78 * 50 * COIN_VALUE + 20_000).unwrap();
     assert_eq!(block_rarities.vintage, 10_001);
     assert_eq!(block_rarities.nakamoto, 0);
     assert_eq!(block_rarities.first_transaction, 0);
@@ -327,7 +337,11 @@ mod tests {
     assert_eq!(block_rarities.pizza, 0);
     assert_eq!(block_rarities.palindrome, 0);
 
-    block_rarities = get_block_rarities(286 * 50 * COIN_VALUE + 10_000, 286 * 50 * COIN_VALUE + 20_000).unwrap();
+    block_rarities = get_block_rarities(
+      286 * 50 * COIN_VALUE + 10_000,
+      286 * 50 * COIN_VALUE + 20_000,
+    )
+    .unwrap();
     assert_eq!(block_rarities.vintage, 10_001);
     assert_eq!(block_rarities.nakamoto, 10_001);
     assert_eq!(block_rarities.first_transaction, 0);
