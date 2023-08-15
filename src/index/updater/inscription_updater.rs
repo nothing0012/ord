@@ -393,7 +393,14 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         _ => new_satpoint,
       };
 
-      self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint, tx, tx_block_index, index)?;
+      self.update_inscription_location(
+        input_sat_ranges,
+        flotsam,
+        new_satpoint,
+        tx,
+        tx_block_index,
+        index,
+      )?;
     }
 
     if is_coinbase {

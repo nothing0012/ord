@@ -79,6 +79,7 @@ use {
 };
 
 pub use crate::{
+  block_rarity::BlockRarity,
   fee_rate::FeeRate,
   inscription::Inscription,
   object::Object,
@@ -106,6 +107,7 @@ macro_rules! tprintln {
 }
 
 mod arguments;
+mod block_rarity;
 mod blocktime;
 mod chain;
 mod config;

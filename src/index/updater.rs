@@ -558,13 +558,7 @@ impl<'index> Updater<'_> {
         .chain(block.txdata.first())
         .enumerate()
       {
-        inscription_updater.index_envelopes(
-          tx,
-          *txid,
-          tx_block_index,
-          None,
-          index,
-        )?;
+        inscription_updater.index_envelopes(tx, *txid, tx_block_index, None, index)?;
       }
     }
 
