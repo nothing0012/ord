@@ -76,7 +76,7 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
   }
 
   let answer_id = value.get_answer_id();
-  if index.has_sat_index().is_err() {
+  if !index.has_sat_index() {
     return invalid_params(answer_id, "Sat index is not available".to_string());
   }
 
