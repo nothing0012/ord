@@ -102,7 +102,7 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
         List::Spent => {}
         List::Unspent(ranges) => {
           for range in ranges {
-            let block_rarities = match get_block_rarities(range.0, range.1) {
+            let block_rarities = match get_block_rarities(range.0, range.1 - 1) {
               Ok(block_rarities) => block_rarities,
               Err(err) => return invalid_params(answer_id, err.to_string()),
             };
