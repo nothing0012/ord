@@ -1,7 +1,7 @@
 use super::*;
 use crate::block_rarity::{
   is_palindrome, BLOCK78_BLOCK_HEIGHT, BLOCK9_BLOCK_HEIGHT, FIRST_TRANSACTION_SAT_RANGE,
-  MAX_PIZZA_BLOCK_HEIGHT, NAKAMOTO_BLOCK_HEIGHTS, PIZZA_RANGE_MAP, VINTAGE_BLOCK_HEIGHT,
+  NAKAMOTO_BLOCK_HEIGHTS, PIZZA_RANGE_MAP, VINTAGE_BLOCK_HEIGHT,
 };
 use crate::subcommand::{traits::Output as SatDetails, wallet::sats::rare_sats};
 use axum_jrpc::{
@@ -12,14 +12,9 @@ use serde_json::Value;
 use std::cmp::{max, min};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct BlockRarities {
-  pub vintage: Vec<(u64, u64)>,
-  pub nakamoto: Vec<(u64, u64)>,
-  pub first_transaction: Vec<(u64, u64)>,
-  pub pizza: Vec<(u64, u64)>,
-  pub block9: Vec<(u64, u64)>,
-  pub block78: Vec<(u64, u64)>,
-  pub palindrome: Vec<(u64, u64)>,
+pub struct BlockRarityInfo {
+  pub block_rarity: BlockRarity,
+  pub chunks: Vec<(u64, u64)>,
 }
 
 pub(super) async fn handler(
@@ -57,7 +52,7 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
     utxo: String,
     start: u64,
     end: u64,
-    block_rarities: BlockRarities,
+    block_rarities: Vec<BlockRarityInfo>,
   }
 
   #[derive(Serialize)]
@@ -147,75 +142,91 @@ async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResul
   Ok(JsonRpcResponse::success(answer_id, res))
 }
 
-fn get_block_rarities(start: u64, end: u64) -> Result<BlockRarities> {
-  let mut block78_chunks: Vec<(u64, u64)> = Vec::new();
-  let mut block9_chunks: Vec<(u64, u64)> = Vec::new();
-  let mut first_transaction_chunks: Vec<(u64, u64)> = Vec::new();
-  let mut nakamoto_chunks: Vec<(u64, u64)> = Vec::new();
-  let mut palindrome_chunks: Vec<(u64, u64)> = Vec::new();
-  let mut pizza_chunks: Vec<(u64, u64)> = Vec::new();
-  let mut vintage_chunks: Vec<(u64, u64)> = Vec::new();
-
+fn get_block_rarities(start: u64, end: u64) -> Result<Vec<BlockRarityInfo>> {
   if start >= end {
     return Err(anyhow!("invalid sat range: start {start} >= end {end}"));
   }
 
-  let block_height = Sat(start).height().n();
-
-  if block_height != Sat(end - 1).height().n() {
+  if Sat(start).height().n() != Sat(end - 1).height().n() {
     return Err(anyhow!(
       "invalid sat range: start {start} and end {end} are in different blocks"
     ));
   }
 
-  // ignore sat ranges later than the max pizza block
-  if block_height <= MAX_PIZZA_BLOCK_HEIGHT {
-    if block_height <= VINTAGE_BLOCK_HEIGHT {
-      vintage_chunks.push((start, end));
+  let mut block_rarities = vec![];
+  for block_rarity in &[
+    BlockRarity::Vintage,
+    BlockRarity::Nakamoto,
+    BlockRarity::Block9,
+    BlockRarity::Block78,
+    BlockRarity::FirstTransaction,
+    BlockRarity::Pizza,
+    BlockRarity::Palindrome,
+  ] {
+    let chunks = get_block_rarity_chunks(block_rarity, start, end);
+    if !chunks.is_empty() {
+      block_rarities.push(BlockRarityInfo {
+        block_rarity: block_rarity.clone(),
+        chunks,
+      });
     }
+  }
 
-    if NAKAMOTO_BLOCK_HEIGHTS.contains(&block_height) {
-      nakamoto_chunks.push((start, end));
-    }
+  Ok(block_rarities)
+}
 
-    if block_height == BLOCK9_BLOCK_HEIGHT {
-      block9_chunks.push((start, end));
-      if start < FIRST_TRANSACTION_SAT_RANGE.1 {
-        first_transaction_chunks.push((start, min(FIRST_TRANSACTION_SAT_RANGE.1, end)));
+fn get_block_rarity_chunks(block_rarity: &BlockRarity, start: u64, end: u64) -> Vec<(u64, u64)> {
+  let mut chunks = vec![];
+  let block_height = Sat(start).height().n();
+
+  match block_rarity {
+    BlockRarity::Vintage => {
+      if block_height <= VINTAGE_BLOCK_HEIGHT {
+        chunks.push((start, end));
       }
-    } else if block_height == BLOCK78_BLOCK_HEIGHT {
-      block78_chunks.push((start, end));
     }
-
-    if PIZZA_RANGE_MAP.contains_key(&block_height) {
-      let pizza_sat_ranges = PIZZA_RANGE_MAP.get(&block_height).unwrap();
-      for range in pizza_sat_ranges {
-        if (start >= range.1) || (end <= range.0) {
-          continue;
+    BlockRarity::Nakamoto => {
+      if NAKAMOTO_BLOCK_HEIGHTS.contains(&block_height) {
+        chunks.push((start, end));
+      }
+    }
+    BlockRarity::Block9 => {
+      if block_height == BLOCK9_BLOCK_HEIGHT {
+        chunks.push((start, end));
+      }
+    }
+    BlockRarity::Block78 => {
+      if block_height == BLOCK78_BLOCK_HEIGHT {
+        chunks.push((start, end));
+      }
+    }
+    BlockRarity::FirstTransaction => {
+      if block_height == BLOCK9_BLOCK_HEIGHT && start < FIRST_TRANSACTION_SAT_RANGE.1 {
+        chunks.push((start, min(FIRST_TRANSACTION_SAT_RANGE.1, end)));
+      }
+    }
+    BlockRarity::Pizza => {
+      if PIZZA_RANGE_MAP.contains_key(&block_height) {
+        let pizza_sat_ranges = PIZZA_RANGE_MAP.get(&block_height).unwrap();
+        for range in pizza_sat_ranges {
+          if (start >= range.1) || (end <= range.0) {
+            continue;
+          }
+          chunks.push((max(range.0, start), min(range.1, end)));
         }
-        pizza_chunks.push((max(range.0, start), min(range.1, end)));
+      }
+    }
+    BlockRarity::Palindrome => {
+      if end - start <= 2_000_000 {
+        for i in start..end {
+          if is_palindrome(&i) {
+            chunks.push((i, i + 1));
+          }
+        }
       }
     }
   }
-
-  // Assume sat ranges are not too large for most of the cases.
-  if end - start <= 2_000_000 {
-    for i in start..end {
-      if is_palindrome(&i) {
-        palindrome_chunks.push((i, i + 1));
-      }
-    }
-  }
-
-  Ok(BlockRarities {
-    vintage: vintage_chunks,
-    nakamoto: nakamoto_chunks,
-    first_transaction: first_transaction_chunks,
-    pizza: pizza_chunks,
-    block9: block9_chunks,
-    block78: block78_chunks,
-    palindrome: palindrome_chunks,
-  })
+  chunks
 }
 
 #[cfg(test)]
@@ -248,46 +259,49 @@ mod tests {
     let mut block_rarities =
       get_block_rarities(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000).unwrap();
     assert_eq!(
-      block_rarities.vintage,
-      vec![(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000)]
-    );
-    assert_eq!(
-      block_rarities.nakamoto,
-      vec![(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000)]
-    );
-    assert_eq!(
-      block_rarities.first_transaction,
-      vec![(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE)]
-    );
-    assert_eq!(
-      block_rarities.block9,
-      vec![(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000)]
-    );
-    assert_eq!(block_rarities.block78, vec![]);
-    assert_eq!(block_rarities.pizza, vec![]);
-    assert_eq!(
-      block_rarities.palindrome,
+      block_rarities,
       vec![
-        (45_999_999_954, 45_999_999_955),
-        (46_000_000_064, 46_000_000_065)
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Vintage,
+          chunks: vec![(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Nakamoto,
+          chunks: vec![(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Block9,
+          chunks: vec![(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE + 10_000)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::FirstTransaction,
+          chunks: vec![(460 * COIN_VALUE - 10_000, 460 * COIN_VALUE)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Palindrome,
+          chunks: vec![
+            (45_999_999_954, 45_999_999_955),
+            (46_000_000_064, 46_000_000_065)
+          ]
+        }
       ]
     );
 
     block_rarities =
       get_block_rarities(78 * 50 * COIN_VALUE + 10_000, 78 * 50 * COIN_VALUE + 20_000).unwrap();
     assert_eq!(
-      block_rarities.vintage,
-      vec![(78 * 50 * COIN_VALUE + 10_000, 78 * 50 * COIN_VALUE + 20_000)]
+      block_rarities,
+      vec![
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Vintage,
+          chunks: vec![(78 * 50 * COIN_VALUE + 10_000, 78 * 50 * COIN_VALUE + 20_000)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Block78,
+          chunks: vec![(78 * 50 * COIN_VALUE + 10_000, 78 * 50 * COIN_VALUE + 20_000)]
+        },
+      ]
     );
-    assert_eq!(block_rarities.nakamoto, vec![]);
-    assert_eq!(block_rarities.first_transaction, vec![]);
-    assert_eq!(block_rarities.block9, vec![]);
-    assert_eq!(
-      block_rarities.block78,
-      vec![(78 * 50 * COIN_VALUE + 10_000, 78 * 50 * COIN_VALUE + 20_000)]
-    );
-    assert_eq!(block_rarities.pizza, vec![]);
-    assert_eq!(block_rarities.palindrome, vec![]);
 
     block_rarities = get_block_rarities(
       286 * 50 * COIN_VALUE + 10_000,
@@ -295,56 +309,42 @@ mod tests {
     )
     .unwrap();
     assert_eq!(
-      block_rarities.vintage,
-      vec![(
-        286 * 50 * COIN_VALUE + 10_000,
-        286 * 50 * COIN_VALUE + 20_000
-      )]
-    );
-    assert_eq!(
-      block_rarities.nakamoto,
-      vec![(
-        286 * 50 * COIN_VALUE + 10_000,
-        286 * 50 * COIN_VALUE + 20_000
-      )]
-    );
-    assert_eq!(block_rarities.first_transaction, vec![]);
-    assert_eq!(block_rarities.block9, vec![]);
-    assert_eq!(block_rarities.block78, vec![]);
-    assert_eq!(block_rarities.pizza, vec![]);
-    assert_eq!(block_rarities.palindrome, vec![]);
-
-    block_rarities = get_block_rarities(204589006000000, 204589046000000).unwrap();
-    assert_eq!(block_rarities.vintage, vec![]);
-    assert_eq!(block_rarities.nakamoto, vec![]);
-    assert_eq!(block_rarities.first_transaction, vec![]);
-    assert_eq!(block_rarities.block9, vec![]);
-    assert_eq!(block_rarities.block78, vec![]);
-    /* qualified range
-    204589006000000	,	204589008000000 -> 2_000_000
-    204589017000000	,	204589019000000 -> 2_000_000
-    204589026000000	,	204589028000000 -> 2_000_000
-    204589029000000	,	204589030000000 -> 1_000_000
-    204589032000000	,	204589033000000 -> 1_000_000
-    204589034000000	,	204589035000000 -> 1_000_000
-    204589037000000	,	204589038000000 -> 1_000_000
-    204589041000000	,	204589043000000 -> 2_000_000
-    204589045000000	,	204589046000000 -> 1_000_000
-    */
-    assert_eq!(
-      block_rarities.pizza,
+      block_rarities,
       vec![
-        (204589006000000, 204589008000000),
-        (204589017000000, 204589019000000),
-        (204589026000000, 204589028000000),
-        (204589029000000, 204589030000000),
-        (204589032000000, 204589033000000),
-        (204589034000000, 204589035000000),
-        (204589037000000, 204589038000000),
-        (204589041000000, 204589043000000),
-        (204589045000000, 204589046000000)
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Vintage,
+          chunks: vec![(
+            286 * 50 * COIN_VALUE + 10_000,
+            286 * 50 * COIN_VALUE + 20_000
+          )]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Nakamoto,
+          chunks: vec![(
+            286 * 50 * COIN_VALUE + 10_000,
+            286 * 50 * COIN_VALUE + 20_000
+          )]
+        },
       ]
     );
-    assert_eq!(block_rarities.palindrome, vec![]);
+
+    block_rarities = get_block_rarities(204589006000000, 204589046000000).unwrap();
+    assert_eq!(
+      block_rarities,
+      vec![BlockRarityInfo {
+        block_rarity: BlockRarity::Pizza,
+        chunks: vec![
+          (204589006000000, 204589008000000),
+          (204589017000000, 204589019000000),
+          (204589026000000, 204589028000000),
+          (204589029000000, 204589030000000),
+          (204589032000000, 204589033000000),
+          (204589034000000, 204589035000000),
+          (204589037000000, 204589038000000),
+          (204589041000000, 204589043000000),
+          (204589045000000, 204589046000000)
+        ]
+      },]
+    );
   }
 }
