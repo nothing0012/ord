@@ -274,14 +274,7 @@ impl StreamEvent {
           tx.output
             .get(old_satpoint.outpoint.vout as usize)
             .and_then(|txout| {
-              Address::from_script(&txout.script_pubkey, StreamEvent::get_network())
-                .map_err(|e| {
-                  log::error!(
-                    "StreamEvent::with_transfer could not parse old_owner address: {}",
-                    e
-                  );
-                })
-                .ok()
+              Address::from_script(&txout.script_pubkey, StreamEvent::get_network()).ok()
             })
         });
     };
