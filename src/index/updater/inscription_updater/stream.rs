@@ -231,6 +231,7 @@ impl StreamEvent {
       .map(|content_type| content_type.to_string());
     self.content_length = inscription.content_length();
     self.content_media = Some(inscription.media().to_string());
+    self.parent_id = inscription.parent();
     self.content_body = match inscription.body() {
       Some(body) => {
         // only encode if the body length is less than 1M bytes
