@@ -164,7 +164,7 @@ impl StreamEvent {
     block_hash: BlockHash,
   ) -> Self {
     StreamEvent {
-      version: "6.0.0".to_owned(), // should match the ord-kafka docker image version
+      version: "7.0.0".to_owned(), // should match the ord-kafka docker image version
       inscription_id,
       block_timestamp,
       block_height,
