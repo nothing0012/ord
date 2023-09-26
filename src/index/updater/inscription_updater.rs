@@ -1,6 +1,6 @@
 mod stream;
 
-use crate::inscription::TransactionInscription;
+use crate::inscription::Inscription;
 use stream::StreamEvent;
 use {super::*, inscription::Curse};
 
@@ -18,7 +18,7 @@ enum Origin {
     fee: u64,
     parent: Option<InscriptionId>,
     unbound: bool,
-    inscription: TransactionInscription,
+    inscription: Inscription,
   },
   Old {
     old_satpoint: SatPoint,
@@ -254,7 +254,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             fee: 0,
             parent: inscription.payload.parent(),
             unbound,
-            inscription: inscription.clone(),
+            inscription: inscription.payload.clone(),
           },
         });
 
@@ -514,7 +514,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           self.height,
           self.block_hash,
         )
-        .with_create(sat, number, inscription, parent)
+        .with_create(sat, inscription_number, inscription, parent)
         .publish()?;
 
         unbound

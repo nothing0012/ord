@@ -1,4 +1,4 @@
-use crate::inscription::TransactionInscription;
+use crate::inscription::Inscription;
 use crate::subcommand::traits::Output;
 use base64::{engine::general_purpose, Engine as _};
 
@@ -286,11 +286,9 @@ impl StreamEvent {
     &mut self,
     sat: Option<Sat>,
     inscription_number: i64,
-    inscription: TransactionInscription,
+    inscription: Inscription,
     parent_id: Option<InscriptionId>,
   ) -> &mut Self {
-    let inscription = inscription.inscription;
-
     self.enrich_content(inscription);
     self.sat = sat;
     self.inscription_number = Some(inscription_number);
