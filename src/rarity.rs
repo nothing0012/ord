@@ -26,10 +26,10 @@ impl Display for Rarity {
         Self::Epic => "epic",
         Self::Legendary => "legendary",
         Self::Mythic => "mythic",
-        Self::BlackUncommon => "black-uncommon",
-        Self::BlackRare => "black-rare",
-        Self::BlackEpic => "black-epic",
-        Self::BlackLegendary => "black-legendary",
+        Self::BlackUncommon => "black_uncommon",
+        Self::BlackRare => "black_rare",
+        Self::BlackEpic => "black_epic",
+        Self::BlackLegendary => "black_legendary",
       }
     )
   }
@@ -83,10 +83,10 @@ impl FromStr for Rarity {
       "epic" => Ok(Self::Epic),
       "legendary" => Ok(Self::Legendary),
       "mythic" => Ok(Self::Mythic),
-      "black-uncommon" => Ok(Self::BlackUncommon),
-      "black-rare" => Ok(Self::BlackRare),
-      "black-epic" => Ok(Self::BlackEpic),
-      "black-legendary" => Ok(Self::BlackLegendary),
+      "black_uncommon" => Ok(Self::BlackUncommon),
+      "black_rare" => Ok(Self::BlackRare),
+      "black_epic" => Ok(Self::BlackEpic),
+      "black_legendary" => Ok(Self::BlackLegendary),
       _ => Err(anyhow!("invalid rarity: {s}")),
     }
   }
@@ -172,10 +172,10 @@ mod tests {
     case("epic", Rarity::Epic);
     case("legendary", Rarity::Legendary);
     case("mythic", Rarity::Mythic);
-    case("black-uncommon", Rarity::BlackUncommon);
-    case("black-rare", Rarity::BlackRare);
-    case("black-epic", Rarity::BlackEpic);
-    case("black-legendary", Rarity::BlackLegendary);
+    case("black_uncommon", Rarity::BlackUncommon);
+    case("black_rare", Rarity::BlackRare);
+    case("black_epic", Rarity::BlackEpic);
+    case("black_legendary", Rarity::BlackLegendary);
   }
 
   #[test]
