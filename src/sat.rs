@@ -611,7 +611,10 @@ mod tests {
   #[test]
   fn is_common() {
     fn case(n: u64) {
-      assert_eq!(Sat(n).is_common(), Sat(n).rarity() == Rarity::Common);
+      assert_eq!(
+        Sat(n).is_common(),
+        Sat(n).rarity() == Rarity::Common || Sat(n).rarity() > Rarity::Mythic
+      );
     }
 
     case(0);

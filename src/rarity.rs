@@ -8,6 +8,10 @@ pub enum Rarity {
   Epic,
   Legendary,
   Mythic,
+  BlackUncommon,
+  BlackRare,
+  BlackEpic,
+  BlackLegendary,
 }
 
 impl Display for Rarity {
@@ -22,6 +26,10 @@ impl Display for Rarity {
         Self::Epic => "epic",
         Self::Legendary => "legendary",
         Self::Mythic => "mythic",
+        Self::BlackUncommon => "black-uncommon",
+        Self::BlackRare => "black-rare",
+        Self::BlackEpic => "black-epic",
+        Self::BlackLegendary => "black-legendary",
       }
     )
   }
@@ -46,6 +54,18 @@ impl From<Sat> for Rarity {
       Self::Rare
     } else if third == 0 {
       Self::Uncommon
+    } else if third == sat.epoch().subsidy() - 1 {
+      if minute == SUBSIDY_HALVING_INTERVAL - 1 {
+        if second == DIFFCHANGE_INTERVAL - 1 {
+          Self::BlackLegendary
+        } else {
+          Self::BlackEpic
+        }
+      } else if second == DIFFCHANGE_INTERVAL - 1 {
+        Self::BlackRare
+      } else {
+        Self::BlackUncommon
+      }
     } else {
       Self::Common
     }
@@ -63,6 +83,10 @@ impl FromStr for Rarity {
       "epic" => Ok(Self::Epic),
       "legendary" => Ok(Self::Legendary),
       "mythic" => Ok(Self::Mythic),
+      "black-uncommon" => Ok(Self::BlackUncommon),
+      "black-rare" => Ok(Self::BlackRare),
+      "black-epic" => Ok(Self::BlackEpic),
+      "black-legendary" => Ok(Self::BlackLegendary),
       _ => Err(anyhow!("invalid rarity: {s}")),
     }
   }
@@ -95,13 +119,13 @@ mod tests {
     assert_eq!(Sat(0).rarity(), Rarity::Mythic);
     assert_eq!(Sat(1).rarity(), Rarity::Common);
 
-    assert_eq!(Sat(50 * COIN_VALUE - 1).rarity(), Rarity::Common);
+    assert_eq!(Sat(50 * COIN_VALUE - 1).rarity(), Rarity::BlackUncommon);
     assert_eq!(Sat(50 * COIN_VALUE).rarity(), Rarity::Uncommon);
     assert_eq!(Sat(50 * COIN_VALUE + 1).rarity(), Rarity::Common);
 
     assert_eq!(
       Sat(50 * COIN_VALUE * DIFFCHANGE_INTERVAL - 1).rarity(),
-      Rarity::Common
+      Rarity::BlackRare
     );
     assert_eq!(
       Sat(50 * COIN_VALUE * DIFFCHANGE_INTERVAL).rarity(),
@@ -114,7 +138,7 @@ mod tests {
 
     assert_eq!(
       Sat(50 * COIN_VALUE * SUBSIDY_HALVING_INTERVAL - 1).rarity(),
-      Rarity::Common
+      Rarity::BlackEpic
     );
     assert_eq!(
       Sat(50 * COIN_VALUE * SUBSIDY_HALVING_INTERVAL).rarity(),
@@ -125,7 +149,7 @@ mod tests {
       Rarity::Common
     );
 
-    assert_eq!(Sat(2067187500000000 - 1).rarity(), Rarity::Common);
+    assert_eq!(Sat(2067187500000000 - 1).rarity(), Rarity::BlackLegendary);
     assert_eq!(Sat(2067187500000000).rarity(), Rarity::Legendary);
     assert_eq!(Sat(2067187500000000 + 1).rarity(), Rarity::Common);
   }
@@ -148,6 +172,10 @@ mod tests {
     case("epic", Rarity::Epic);
     case("legendary", Rarity::Legendary);
     case("mythic", Rarity::Mythic);
+    case("black-uncommon", Rarity::BlackUncommon);
+    case("black-rare", Rarity::BlackRare);
+    case("black-epic", Rarity::BlackEpic);
+    case("black-legendary", Rarity::BlackLegendary);
   }
 
   #[test]
