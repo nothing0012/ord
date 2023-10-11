@@ -1784,9 +1784,9 @@ mod tests {
   #[test]
   fn output_with_timeout() {
     TestServer::new_with_timeout().assert_response_regex(
-      format!("/block/0"),
+      "/block/0",
       StatusCode::OK,
-      format!(".*<title>Block 0</title>.*<h1>Block 0</h1>.*"),
+      ".*<title>Block 0</title>.*<h1>Block 0</h1>.*",
     );
   }
 
