@@ -1,5 +1,4 @@
 use super::*;
-use tokio::time::{timeout, Duration};
 use crate::block_rarity::{
   is_palindrome, BLOCK78_BLOCK_HEIGHT, BLOCK9_BLOCK_HEIGHT, FIRST_TRANSACTION_SAT_RANGE,
   NAKAMOTO_BLOCK_HEIGHTS, PIZZA_RANGE_MAP, VINTAGE_BLOCK_HEIGHT,
@@ -25,9 +24,7 @@ pub(super) async fn handler(
 ) -> JrpcResult {
   match value.method.as_str() {
     "getHealth" => get_health(value).await,
-    "getSatRanges" => {
-      timeout(Duration::from_secs(5), get_sat_ranges(value, index)).await?.map_err(timeout_error(answer_id))
-    }
+    "getSatRanges" => get_sat_ranges(value, index).await,
     method => Ok(value.method_not_found(method)),
   }
 }
@@ -36,13 +33,6 @@ fn invalid_params(answer_id: i64, message: String) -> JrpcResult {
   Err(JsonRpcResponse::error(
     answer_id,
     JsonRpcError::new(JsonRpcErrorReason::InvalidParams, message, Value::default()),
-  ))
-}
-
-fn timeout_error(answer_id: i64) -> JrpcResult {
-  Err(JsonRpcResponse::error(
-    answer_id,
-    JsonRpcError::new(JsonRpcErrorReason::InternalError, "timeout".to_owned(), Value::default()),
   ))
 }
 
