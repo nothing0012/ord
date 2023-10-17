@@ -10,6 +10,7 @@
   clippy::cast_sign_loss
 )]
 
+use opentelemetry::global;
 use {
   self::{
     arguments::Arguments,
@@ -73,8 +74,6 @@ use {
   tempfile::TempDir,
   tokio::{runtime::Runtime, task},
 };
-
-use opentelemetry::{global, sdk::propagation::TraceContextPropagator};
 
 pub use crate::{
   block_rarity::BlockRarity, fee_rate::FeeRate, object::Object, rarity::Rarity, sat::Sat,
@@ -171,12 +170,10 @@ pub fn main() {
 
   // Tracer setup
   if env::var("DD_SERVICE").is_ok() {
-    let tracer = tracer::init().unwrap_or_else(|err| {
+    tracer::init().unwrap_or_else(|err| {
       log::error!("Fatal - failed to initialize tracer: {:?}", err);
       process::exit(1);
     });
-    global::set_text_map_propagator(TraceContextPropagator::new());
-    global::set_tracer_provider(tracer.provider().unwrap());
   }
 
   ctrlc::set_handler(move || {
