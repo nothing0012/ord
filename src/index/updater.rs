@@ -1,3 +1,4 @@
+use opentelemetry::{global, trace::Tracer};
 use {
   self::{inscription_updater::InscriptionUpdater, rune_updater::RuneUpdater},
   super::{fetcher::Fetcher, *},
@@ -88,15 +89,19 @@ impl<'index> Updater<'_> {
 
     let mut uncommitted = 0;
     let mut value_cache = HashMap::new();
+
+    let tracer = global::tracer("updater");
     while let Ok(block) = rx.recv() {
-      self.index_block(
-        self.index,
-        &mut outpoint_sender,
-        &mut value_receiver,
-        &mut wtx,
-        block,
-        &mut value_cache,
-      )?;
+      tracer.in_span("index_block", |_| {
+        self.index_block(
+          self.index,
+          &mut outpoint_sender,
+          &mut value_receiver,
+          &mut wtx,
+          block,
+          &mut value_cache,
+        )
+      })?;
 
       if let Some(progress_bar) = &mut progress_bar {
         progress_bar.inc(1);

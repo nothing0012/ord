@@ -78,6 +78,8 @@ use {
   tokio::{runtime::Runtime, task},
 };
 
+use opentelemetry::{global, sdk::propagation::TraceContextPropagator};
+
 pub use crate::{
   block_rarity::BlockRarity,
   fee_rate::FeeRate,
@@ -135,6 +137,7 @@ pub mod subcommand;
 mod tally;
 mod teleburn;
 pub mod templates;
+mod tracer;
 mod wallet;
 
 type Result<T = (), E = Error> = std::result::Result<T, E>;
@@ -179,12 +182,22 @@ fn gracefully_shutdown_indexer() {
 pub fn main() {
   env_logger::init();
 
+  // Tracer setup
+  if env::var("DD_SERVICE").is_ok() {
+    let tracer = tracer::init().unwrap_or_else(|err| {
+      log::error!("Fatal - failed to initialize tracer: {:?}", err);
+      process::exit(1);
+    });
+    global::set_text_map_propagator(TraceContextPropagator::new());
+    global::set_tracer_provider(tracer.provider().unwrap());
+  }
+
   ctrlc::set_handler(move || {
     if SHUTTING_DOWN.fetch_or(true, atomic::Ordering::Relaxed) {
       process::exit(1);
     }
 
-    println!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
+    log::info!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
 
     LISTENERS
       .lock()
@@ -216,4 +229,5 @@ pub fn main() {
   }
 
   gracefully_shutdown_indexer();
+  tracer::close();
 }
