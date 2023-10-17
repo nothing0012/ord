@@ -1,4 +1,5 @@
 use axum::routing::post;
+use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 
 use {
   self::{
@@ -168,6 +169,9 @@ impl Server {
       });
 
       let router = Router::new()
+        .layer(OtelInResponseLayer)
+        //start OpenTelemetry trace on incoming request
+        .layer(OtelAxumLayer::default())
         .route("/", get(Self::home))
         .route("/block/:query", get(Self::block))
         .route("/blockcount", get(Self::block_count))
@@ -202,7 +206,6 @@ impl Server {
 
         // API routes
         .route("/rpc/v1", post(rpc::handler))
-
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -701,7 +704,7 @@ impl Server {
 
     let chain = page_config.chain;
     match chain {
-      Chain::Mainnet => builder.title("Inscriptions"),
+      Chain::Mainnet => builder.title("Inscriptions".to_owned()),
       _ => builder.title(format!("Inscriptions – {chain:?}")),
     };
 
@@ -710,8 +713,8 @@ impl Server {
     for (number, id) in index.get_feed_inscriptions(300)? {
       builder.item(
         rss::ItemBuilder::default()
-          .title(format!("Inscription {number}"))
-          .link(format!("/inscription/{id}"))
+          .title(Some(format!("Inscription {number}")))
+          .link(Some(format!("/inscription/{id}")))
           .guid(Some(rss::Guid {
             value: format!("/inscription/{id}"),
             permalink: true,
