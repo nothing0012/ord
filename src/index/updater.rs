@@ -1,4 +1,5 @@
-use opentelemetry::{global, trace::Tracer};
+use opentelemetry::trace::Tracer;
+use ord_kafka_macros::trace;
 use {
   self::{inscription_updater::InscriptionUpdater, rune_updater::RuneUpdater},
   super::{fetcher::Fetcher, *},
@@ -90,18 +91,15 @@ impl<'index> Updater<'_> {
     let mut uncommitted = 0;
     let mut value_cache = HashMap::new();
 
-    let tracer = global::tracer("updater");
     while let Ok(block) = rx.recv() {
-      tracer.in_span("index_block", |_| {
-        self.index_block(
-          self.index,
-          &mut outpoint_sender,
-          &mut value_receiver,
-          &mut wtx,
-          block,
-          &mut value_cache,
-        )
-      })?;
+      self.index_block(
+        self.index,
+        &mut outpoint_sender,
+        &mut value_receiver,
+        &mut wtx,
+        block,
+        &mut value_cache,
+      )?;
 
       if let Some(progress_bar) = &mut progress_bar {
         progress_bar.inc(1);
@@ -161,6 +159,7 @@ impl<'index> Updater<'_> {
     Ok(())
   }
 
+  #[trace]
   fn fetch_blocks_from(
     index: &Index,
     mut height: u64,
@@ -324,6 +323,7 @@ impl<'index> Updater<'_> {
     Ok((outpoint_sender, value_receiver))
   }
 
+  #[trace]
   fn index_block(
     &mut self,
     index: &Index,

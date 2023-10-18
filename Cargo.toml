@@ -11,7 +11,7 @@ autobins = false
 rust-version = "1.67"
 
 [workspace]
-members = [".", "test-bitcoincore-rpc"]
+members = [".", "test-bitcoincore-rpc", "ord-kafka-macros"]
 
 [dependencies]
 anyhow = { version = "1.0.56", features = ["backtrace"] }
@@ -65,6 +65,7 @@ tower-http = { version = "0.4.0", features = ["compression-br", "compression-gzi
 
 rdkafka = { version = "0.33.2" }
 axum-jrpc = { version = "0.5.1", features = ["serde_json", "anyhow_error"] }
+ord-kafka-macros = { path = "ord-kafka-macros" }
 
 
 [dev-dependencies]
