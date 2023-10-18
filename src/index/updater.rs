@@ -1,7 +1,4 @@
-use opentelemetry::{
-  trace::{Span, Tracer},
-  Context,
-};
+use opentelemetry::trace::Tracer;
 use ord_kafka_macros::trace;
 use {
   self::inscription_updater::InscriptionUpdater,
@@ -177,7 +174,6 @@ impl<'index> Updater<'_> {
 
     let first_inscription_height = index.first_inscription_height;
 
-    let active_span = Context::current();
     let target_height_limit = client.get_block_count()?
       - env::var("BLOCKS_BEHIND")
         .ok()
@@ -185,8 +181,6 @@ impl<'index> Updater<'_> {
         .unwrap_or(0);
 
     thread::spawn(move || loop {
-      let mut span =
-        global::tracer("ord-kafka").start_with_context("get_block_with_retries", &active_span);
       if let Some(height_limit) = height_limit {
         if height >= height_limit {
           break;
@@ -210,8 +204,6 @@ impl<'index> Updater<'_> {
           break;
         }
       }
-
-      span.end();
     });
 
     Ok(rx)

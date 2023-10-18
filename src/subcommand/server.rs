@@ -1,5 +1,5 @@
 use axum::routing::post;
-use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
+// use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 
 use {
   self::{
@@ -44,6 +44,7 @@ use {
 
 mod accept_json;
 mod error;
+mod middleware;
 mod rpc;
 
 #[derive(Clone)]
@@ -169,9 +170,6 @@ impl Server {
       });
 
       let router = Router::new()
-        .layer(OtelInResponseLayer)
-        //start OpenTelemetry trace on incoming request
-        .layer(OtelAxumLayer::default())
         .route("/", get(Self::home))
         .route("/block/:query", get(Self::block))
         .route("/blockcount", get(Self::block_count))
@@ -206,6 +204,7 @@ impl Server {
 
         // API routes
         .route("/rpc/v1", post(rpc::handler))
+        .layer(axum::middleware::from_fn(middleware::tracing_layer))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))

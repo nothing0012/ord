@@ -42,7 +42,6 @@ mime = "0.3.16"
 mime_guess = "2.0.4"
 miniscript = "10.0.0"
 mp4 = "0.13.0"
-axum-tracing-opentelemetry = "0.14.1"
 ord-bitcoincore-rpc = "0.17.0"
 opentelemetry = { version = "0.20.0", features = ["rt-tokio"] }
 opentelemetry-datadog = { version = "0.8.0", features = ["reqwest-blocking-client"] }

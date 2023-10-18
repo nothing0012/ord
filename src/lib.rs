@@ -10,7 +10,6 @@
   clippy::cast_sign_loss
 )]
 
-use opentelemetry::global;
 use {
   self::{
     arguments::Arguments,

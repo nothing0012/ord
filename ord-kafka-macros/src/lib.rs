@@ -12,6 +12,7 @@ pub fn trace(args: TokenStream, input: TokenStream) -> TokenStream {
   let inputs = &func.sig.inputs;
   let output = &func.sig.output;
   let block = &func.block;
+  let async_ident = func.sig.asyncness.is_some();
 
   let name = if args.is_empty() {
     func_name.to_string()
@@ -19,13 +20,40 @@ pub fn trace(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_macro_input!(args as syn::LitStr).value()
   };
 
-  let expanded = quote! {
-      fn #func_name(#inputs) #output {
-          let tracer = opentelemetry::global::tracer("ord-kafka");
-          tracer.in_span(#name, |_| {
+  let expanded = if async_ident {
+    quote! {
+        async fn #func_name(#inputs) #output {
+            use opentelemetry::trace::Span;
+            let tracer = opentelemetry::global::tracer("ord-kafka");
+            let cx = opentelemetry::Context::current();
+            let mut span = tracer.start_with_context(#name, &cx);
+
+            let result = {
               #block
-          })
-      }
+            };
+
+            span.end();
+
+            result
+        }
+    }
+  } else {
+    quote! {
+        fn #func_name(#inputs) #output {
+          use opentelemetry::trace::Span;
+          let tracer = opentelemetry::global::tracer("ord-kafka");
+          let cx = opentelemetry::Context::current();
+          let mut span = tracer.start_with_context(#name, &cx);
+
+          let result = {
+            #block
+          };
+
+          span.end();
+
+          result
+        }
+    }
   };
 
   TokenStream::from(expanded)
