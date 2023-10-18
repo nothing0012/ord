@@ -8,6 +8,8 @@ use axum_jrpc::{
   error::{JsonRpcError, JsonRpcErrorReason},
   JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
+use opentelemetry::trace::Tracer;
+use ord_kafka_macros::trace;
 use serde_json::Value;
 use std::cmp::{max, min};
 
@@ -41,6 +43,7 @@ async fn get_health(value: JsonRpcExtractor) -> JrpcResult {
   Ok(JsonRpcResponse::success(answer_id, "OK"))
 }
 
+#[trace]
 async fn get_sat_ranges(value: JsonRpcExtractor, index: Arc<Index>) -> JrpcResult {
   #[derive(Deserialize)]
   struct Req {

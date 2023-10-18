@@ -1,9 +1,10 @@
 use log::{info, warn};
 use opentelemetry::{
+  global,
   sdk::trace::{RandomIdGenerator, Sampler},
   trace::TraceError,
 };
-use opentelemetry_datadog::ApiVersion;
+use opentelemetry_datadog::{ApiVersion, DatadogPropagator};
 use std::env;
 
 fn get_trace_sample_rate() -> f64 {
@@ -40,8 +41,8 @@ fn get_agent_url() -> String {
   format!("http://{host}:{port}")
 }
 
-pub(crate) fn init() -> Result<opentelemetry::sdk::trace::Tracer, TraceError> {
-  opentelemetry_datadog::new_pipeline()
+pub(crate) fn init() -> Result<(), TraceError> {
+  let tracer = opentelemetry_datadog::new_pipeline()
     .with_service_name(env::var("DD_SERVICE").unwrap_or("ord-kafka".to_owned()))
     .with_api_version(ApiVersion::Version05)
     .with_agent_endpoint(get_agent_url())
@@ -59,7 +60,11 @@ pub(crate) fn init() -> Result<opentelemetry::sdk::trace::Tracer, TraceError> {
         })
         .with_id_generator(RandomIdGenerator::default()),
     )
-    .install_simple()
+    .install_simple()?;
+  global::set_text_map_propagator(DatadogPropagator::default());
+  global::set_tracer_provider(tracer.provider().unwrap());
+
+  Ok(())
 }
 
 pub(crate) fn close() {
