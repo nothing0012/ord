@@ -23,7 +23,7 @@ pub(crate) async fn tracing_layer<B>(request: Request<B>, next: Next<B>) -> Resp
   let response = next.run(request).await;
 
   // Set http response
-  span.set_attribute(Key::new("http.status_code").i64(response.status().as_u16() as i64));
+  span.set_attribute(Key::new("http.status_code").i64(i64::from(response.status().as_u16())));
   span.end();
 
   response
