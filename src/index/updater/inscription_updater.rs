@@ -555,7 +555,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           self.height,
           self.block_hash,
         )
-        .with_create(sat, inscription_number, inscription)
+        .with_create(sat, inscription_number, inscription, parent)
         .publish()?;
 
         unbound

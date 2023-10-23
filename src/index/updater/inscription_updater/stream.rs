@@ -142,6 +142,10 @@ pub struct StreamEvent {
   content_length: Option<usize>,
   content_media: Option<String>,
   content_body: Option<String>,
+  parent: Option<InscriptionId>,
+  metadata: Option<Value>,
+  metaprotocol: Option<String>,
+  pointer: Option<u64>,
 
   // plugins
   brc20: Option<BRC20>,
@@ -163,7 +167,7 @@ impl StreamEvent {
     block_hash: BlockHash,
   ) -> Self {
     StreamEvent {
-      version: "6.0.0".to_owned(), // should match the ord-kafka docker image version
+      version: "7.0.0".to_owned(), // should match the ord-kafka docker image version
       inscription_id,
       block_timestamp,
       block_height,
@@ -198,6 +202,10 @@ impl StreamEvent {
       content_length: None,
       content_media: None,
       content_body: None,
+      parent: None,
+      metadata: None,
+      metaprotocol: None,
+      pointer: None,
       brc20: None,
       domain: None,
       old_location: None,
@@ -224,6 +232,9 @@ impl StreamEvent {
   }
 
   fn enrich_content(&mut self, inscription: Inscription) -> &mut Self {
+    self.metaprotocol = inscription.metaprotocol().map(|mp| mp.to_owned());
+    self.metadata = inscription.metadata();
+    self.pointer = inscription.pointer();
     self.content_type = inscription
       .content_type()
       .map(|content_type| content_type.to_string());
@@ -296,10 +307,12 @@ impl StreamEvent {
     sat: Option<Sat>,
     inscription_number: i64,
     inscription: Inscription,
+    parent: Option<InscriptionId>,
   ) -> &mut Self {
     self.enrich_content(inscription);
     self.sat = sat;
     self.inscription_number = Some(inscription_number);
+    self.parent = parent;
     self.sat_details = match self.sat {
       Some(Sat(n)) => {
         let sat = Sat(n);
