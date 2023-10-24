@@ -8,7 +8,6 @@ use axum_jrpc::{
   error::{JsonRpcError, JsonRpcErrorReason},
   JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
-use opentelemetry::trace::Tracer;
 use ord_kafka_macros::trace;
 use serde_json::Value;
 use std::cmp::{max, min};

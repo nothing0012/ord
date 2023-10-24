@@ -1,60 +1,49 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+use syn::{parse_macro_input, ItemFn, LitStr};
 
-/// Trace a function with a given operation name. Example usage:
-/// `#[trace]`, the span name will be the function's name.
-/// Alternatively, `#[trace("my_span_name")]` will use the given span name
+fn extract_span_name(arg: TokenStream) -> Option<LitStr> {
+  let parsed: Result<LitStr, _> = syn::parse(arg);
+  parsed.ok()
+}
+
 #[proc_macro_attribute]
 pub fn trace(args: TokenStream, input: TokenStream) -> TokenStream {
-  let func = parse_macro_input!(input as ItemFn);
-  let func_name = &func.sig.ident;
-  let inputs = &func.sig.inputs;
-  let output = &func.sig.output;
-  let block = &func.block;
-  let async_ident = func.sig.asyncness.is_some();
+  let function = parse_macro_input!(input as ItemFn);
+  let maybe_span_name = extract_span_name(args);
 
-  let name = if args.is_empty() {
-    func_name.to_string()
+  let fn_name = &function.sig.ident;
+  let fn_vis = &function.vis;
+  let fn_block = &function.block;
+  let fn_inputs = &function.sig.inputs;
+  let fn_output = &function.sig.output;
+  let fn_generics = &function.sig.generics;
+  let asyncness = &function.sig.asyncness;
+
+  let span_name = if let Some(msg) = maybe_span_name {
+    msg.value()
   } else {
-    parse_macro_input!(args as syn::LitStr).value()
+    fn_name.to_string()
   };
 
-  let expanded = if async_ident {
-    quote! {
-        async fn #func_name(#inputs) #output {
-            use opentelemetry::trace::Span;
-            let tracer = opentelemetry::global::tracer("ord-kafka");
-            let cx = opentelemetry::Context::current();
-            let mut span = tracer.start_with_context(#name, &cx);
-
-            let result = {
-              #block
-            };
-
-            span.end();
-
-            result
-        }
-    }
-  } else {
-    quote! {
-        fn #func_name(#inputs) #output {
+  let output = quote! {
+      #fn_vis #asyncness fn #fn_name #fn_generics(#fn_inputs) #fn_output {
           use opentelemetry::trace::Span;
+          use opentelemetry::trace::Tracer;
+          use opentelemetry::trace::TraceContextExt;
+
           let tracer = opentelemetry::global::tracer("ord-kafka");
-          let cx = opentelemetry::Context::current();
-          let mut span = tracer.start_with_context(#name, &cx);
+          let span = tracer.start(#span_name);
+          let cx = opentelemetry::Context::current_with_span(span);
+          let _guard = cx.clone().attach();
 
           let result = {
-            #block
+            #fn_block
           };
 
-          span.end();
-
           result
-        }
-    }
+      }
   };
 
-  TokenStream::from(expanded)
+  output.into()
 }

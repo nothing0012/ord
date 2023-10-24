@@ -1,4 +1,3 @@
-use opentelemetry::trace::Tracer;
 use ord_kafka_macros::trace;
 use {
   self::{inscription_updater::InscriptionUpdater, rune_updater::RuneUpdater},

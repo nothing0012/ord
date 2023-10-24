@@ -334,6 +334,7 @@ impl StreamEvent {
     self
   }
 
+  #[trace]
   pub fn publish(&mut self) -> Result {
     if env::var("KAFKA_TOPIC").is_err() {
       return Ok(());
