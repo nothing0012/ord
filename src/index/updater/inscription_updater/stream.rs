@@ -355,12 +355,12 @@ impl StreamEvent {
 
   fn log_kafka_message(&self) -> Result {
     // Only log the message if it is not a SATS mint inscription
-    if let Some(result) = self
+    if let Some(is_brc20_sats_mint_transfer) = self
       .brc20
       .as_ref()
-      .map(|brc20| brc20.op == "mint" && brc20.tick == "sats")
+      .map(|brc20| brc20.op == "mint" && brc20.tick == "sats" && self.old_location.is_some())
     {
-      if !result {
+      if !is_brc20_sats_mint_transfer {
         println!("{}", serde_json::to_string(&self)?);
       }
     } else {
