@@ -83,8 +83,9 @@ use {
   tokio::{runtime::Runtime, task},
 };
 
-pub use crate::{
+pub use self::{
   block_rarity::BlockRarity,
+  envelope::Envelope,
   fee_rate::FeeRate,
   index::Index,
   inscription::Inscription,
