@@ -187,6 +187,28 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
   }
 }
 
+/// An event that indicates that the location of an inscription has changed.
+/// Newly created inscriptions will include additional metadata including
+/// rarity, cursed status, charms, etc.
+#[derive(Debug, Clone)]
+pub struct LocationUpdateEvent {
+  /// The inscription ID.
+  pub inscription_id: InscriptionId,
+  /// The old location of the inscription. None if this is a newly created inscription.
+  pub old_satpoint: Option<SatPoint>,
+  /// The new location of the inscription.
+  pub new_satpoint: SatPoint,
+  /// Sequence number of inscription.
+  pub sequence_number: u32,
+  /// Block height of event
+  pub block_height: u32,
+
+  /// Bitmap of charms present on the inscription (new inscriptions only).
+  pub charms: Option<u16>,
+  /// Parent inscription ID if present (new inscriptions only).
+  pub parent_inscription_id: Option<InscriptionId>,
+}
+
 pub struct Index {
   client: Client,
   database: Database,
@@ -202,6 +224,7 @@ pub struct Index {
   path: PathBuf,
   started: DateTime<Utc>,
   unrecoverably_reorged: AtomicBool,
+  location_update_sender: Option<tokio::sync::mpsc::Sender<LocationUpdateEvent>>,
 }
 
 impl Index {
@@ -373,9 +396,18 @@ impl Index {
       path,
       started: Utc::now(),
       unrecoverably_reorged: AtomicBool::new(false),
+      location_update_sender: None,
     })
   }
 
+  pub fn with_location_update_sender(
+    &mut self,
+    sender: tokio::sync::mpsc::Sender<LocationUpdateEvent>,
+  ) -> &Self {
+    self.location_update_sender = Some(sender);
+
+    self
+  }
   #[cfg(test)]
   fn set_durability(&mut self, durability: redb::Durability) {
     self.durability = durability;
@@ -632,7 +664,7 @@ impl Index {
     Ok(info)
   }
 
-  pub(crate) fn update(&self) -> Result {
+  pub fn update(&self) -> Result {
     let mut updater = Updater::new(self)?;
 
     loop {
@@ -5789,6 +5821,20 @@ mod tests {
       assert_eq!(entry.inscription_number, 2);
 
       assert_eq!(sat, entry.sat);
+    }
+  }
+
+  #[test]
+  fn set_location_update_sender() {
+    for context in Context::configurations() {
+      let mut index = context.index;
+      let (sender, _) = tokio::sync::mpsc::channel::<LocationUpdateEvent>(1);
+
+      assert_eq!(index.location_update_sender.is_none(), true);
+
+      index.with_location_update_sender(sender);
+
+      assert_eq!(index.location_update_sender.is_some(), true);
     }
   }
 }

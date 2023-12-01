@@ -127,7 +127,7 @@ mod height;
 mod index;
 mod inscriptions;
 mod object;
-mod options;
+pub mod options;
 mod outgoing;
 pub mod rarity;
 mod representation;
