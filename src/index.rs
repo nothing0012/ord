@@ -5842,11 +5842,11 @@ mod tests {
       let mut index = context.index;
       let (sender, _) = tokio::sync::mpsc::channel::<LocationUpdateEvent>(1);
 
-      assert_eq!(index.event_sender.is_none(), true);
+      assert!(index.event_sender.is_none());
 
       index.with_event_sender(sender);
 
-      assert_eq!(index.event_sender.is_some(), true);
+      assert!(index.event_sender.is_some());
     }
   }
 }
