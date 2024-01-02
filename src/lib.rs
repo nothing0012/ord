@@ -124,7 +124,7 @@ mod deserialize_from_str;
 mod epoch;
 mod fee_rate;
 mod height;
-mod index;
+pub mod index;
 mod inscriptions;
 mod object;
 pub mod options;
