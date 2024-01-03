@@ -173,7 +173,13 @@ pub(crate) struct Server {
 }
 
 impl Server {
-  pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle) -> SubcommandResult {
+  pub(crate) fn run(
+    self,
+    options: Options,
+    index: Arc<Index>,
+    handle: Handle,
+    custom_routes: Option<Router<Arc<ServerConfig>>>,
+  ) -> SubcommandResult {
     Runtime::new()?.block_on(async {
       let index_clone = index.clone();
 
@@ -270,6 +276,7 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
+        .nest("/custom", custom_routes.unwrap_or_default())
         .layer(Extension(index))
         .layer(Extension(server_config.clone()))
         .layer(Extension(config))
@@ -1544,7 +1551,13 @@ mod tests {
     }
 
     fn new_with_args(ord_args: &[&str], server_args: &[&str]) -> Self {
-      Self::new_server(test_bitcoincore_rpc::spawn(), None, ord_args, server_args)
+      Self::new_server(
+        test_bitcoincore_rpc::spawn(),
+        None,
+        ord_args,
+        server_args,
+        false,
+      )
     }
 
     fn new_with_regtest() -> Self {
@@ -1555,6 +1568,7 @@ mod tests {
         None,
         &["--chain", "regtest"],
         &[],
+        false,
       )
     }
 
@@ -1566,6 +1580,7 @@ mod tests {
         None,
         &["--chain", "regtest"],
         &["--enable-json-api"],
+        false,
       )
     }
 
@@ -1577,6 +1592,7 @@ mod tests {
         None,
         &["--chain", "regtest", "--index-sats"],
         &[],
+        false,
       )
     }
 
@@ -1588,6 +1604,7 @@ mod tests {
         None,
         &["--chain", "regtest", "--index-runes"],
         &["--enable-json-api"],
+        false,
       )
     }
 
@@ -1595,7 +1612,19 @@ mod tests {
       bitcoin_rpc_server: test_bitcoincore_rpc::Handle,
       config: String,
     ) -> Self {
-      Self::new_server(bitcoin_rpc_server, Some(config), &[], &[])
+      Self::new_server(bitcoin_rpc_server, Some(config), &[], &[], false)
+    }
+
+    fn new_with_regtest_with_custom_route() -> Self {
+      Self::new_server(
+        test_bitcoincore_rpc::builder()
+          .network(bitcoin::Network::Regtest)
+          .build(),
+        None,
+        &["--chain", "regtest"],
+        &[],
+        true,
+      )
     }
 
     fn new_server(
@@ -1603,6 +1632,7 @@ mod tests {
       config: Option<String>,
       ord_args: &[&str],
       server_args: &[&str],
+      mount_custom_route: bool,
     ) -> Self {
       let tempdir = TempDir::new().unwrap();
 
@@ -1643,7 +1673,19 @@ mod tests {
       {
         let index = index.clone();
         let ord_server_handle = ord_server_handle.clone();
-        thread::spawn(|| server.run(options, index, ord_server_handle).unwrap());
+        let custom_routes = mount_custom_route.then_some(
+          Router::<Arc<ServerConfig>>::new()
+            .route("/", get(|| async { "custom index" }))
+            .route(
+              "/:id",
+              get(|Path(id): Path<String>| async move { format!("custom id: {id}") }),
+            ),
+        );
+        thread::spawn(|| {
+          server
+            .run(options, index, ord_server_handle, custom_routes)
+            .unwrap()
+        });
       }
 
       while index.statistic(crate::index::Statistic::Commits) == 0 {
@@ -2527,6 +2569,14 @@ mod tests {
           .collect(),
       }
     );
+  }
+
+  #[test]
+  fn custom_route_works() {
+    let server = TestServer::new_with_regtest_with_custom_route();
+
+    server.assert_response_regex(format!("/custom"), StatusCode::OK, "custom index");
+    server.assert_response_regex(format!("/custom/123"), StatusCode::OK, "custom id: 123");
   }
 
   #[test]
