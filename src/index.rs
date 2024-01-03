@@ -31,7 +31,7 @@ use {
   },
 };
 
-pub(crate) use self::entry::RuneEntry;
+pub use self::entry::RuneEntry;
 
 pub(crate) mod entry;
 pub mod event;
@@ -5801,16 +5801,44 @@ mod tests {
   }
 
   #[test]
-  fn set_event_sender() {
-    for context in Context::configurations() {
-      let mut index = context.index;
-      let (sender, _) = tokio::sync::mpsc::channel::<Event>(1);
+  fn event_sender_channel() {
+    for mut context in Context::configurations() {
+      let (sender, mut receiver) = tokio::sync::mpsc::channel::<Event>(1);
 
-      assert!(index.event_sender.is_none());
+      assert!(context.index.event_sender.is_none());
 
-      index.set_event_sender(sender);
+      context.index.set_event_sender(sender);
+      context.mine_blocks(1);
+      let inscription = Inscription::default();
+      let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+        inputs: &[(1, 0, 0, inscription.to_witness())],
+        fee: COIN_VALUE,
+        ..Default::default()
+      });
 
-      assert!(index.event_sender.is_some());
+      context.mine_blocks(1);
+
+      let inscription_id = InscriptionId { txid, index: 0 };
+
+      let event = receiver.blocking_recv().unwrap();
+      receiver.close();
+
+      let expected_charms = if context.index.index_sats { 513 } else { 0 };
+
+      assert_eq!(
+        event,
+        Event::InscriptionCreated {
+          id: inscription_id,
+          location: Some(SatPoint {
+            outpoint: OutPoint { txid, vout: 0 },
+            offset: 0
+          }),
+          sequence_number: 0,
+          block_height: 2,
+          charms: expected_charms,
+          parent_inscription_id: None
+        }
+      );
     }
   }
 }
