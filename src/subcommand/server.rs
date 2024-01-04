@@ -1500,6 +1500,7 @@ impl Server {
         block_height,
         index.block_height()?.unwrap_or(Height(0)).n(),
         inscriptions,
+        more,
         page_index,
       )?
       .page(page_config)
@@ -2184,7 +2185,7 @@ mod tests {
     );
 
     assert_eq!(
-      server.index.get_rune_balances(),
+      server.index.get_rune_balances().unwrap(),
       [(OutPoint { txid, vout: 0 }, vec![(id, u128::max_value())])]
     );
 
@@ -2253,7 +2254,7 @@ mod tests {
     );
 
     assert_eq!(
-      server.index.get_rune_balances(),
+      server.index.get_rune_balances().unwrap(),
       [(OutPoint { txid, vout: 0 }, vec![(id, u128::max_value())])]
     );
 
@@ -2359,7 +2360,7 @@ mod tests {
     );
 
     assert_eq!(
-      server.index.get_rune_balances(),
+      server.index.get_rune_balances().unwrap(),
       [(OutPoint { txid, vout: 0 }, vec![(id, u128::max_value())])]
     );
 
@@ -2429,7 +2430,7 @@ mod tests {
     let output = OutPoint { txid, vout: 0 };
 
     assert_eq!(
-      server.index.get_rune_balances(),
+      server.index.get_rune_balances().unwrap(),
       [(output, vec![(id, u128::max_value())])]
     );
 
@@ -4260,6 +4261,39 @@ next
   }
 
   #[test]
+  fn charm_coin() {
+    let server = TestServer::new_with_regtest_with_index_sats();
+
+    server.mine_blocks(2);
+
+    let txid = server.bitcoin_rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("text/plain", "foo").to_witness())],
+      ..Default::default()
+    });
+
+    let id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    server.assert_response_regex(
+      format!("/inscription/{id}"),
+      StatusCode::OK,
+      format!(
+        ".*<h1>Inscription 0</h1>.*
+<dl>
+  <dt>id</dt>
+  <dd class=monospace>{id}</dd>
+  <dt>charms</dt>
+  <dd>.*<span title=coin>🪙</span>.*</dd>
+  .*
+</dl>
+.*
+"
+      ),
+    );
+  }
+
+  #[test]
   fn charm_uncommon() {
     let server = TestServer::new_with_regtest_with_index_sats();
 
@@ -4283,9 +4317,7 @@ next
   <dt>id</dt>
   <dd class=monospace>{id}</dd>
   <dt>charms</dt>
-  <dd>
-    <span title=uncommon>🌱</span>
-  </dd>
+  <dd>.*<span title=uncommon>🌱</span>.*</dd>
   .*
 </dl>
 .*
@@ -4318,10 +4350,7 @@ next
   <dt>id</dt>
   <dd class=monospace>{id}</dd>
   <dt>charms</dt>
-  <dd>
-    <span title=uncommon>🌱</span>
-    <span title=nineball>9️⃣</span>
-  </dd>
+  <dd>.*<span title=nineball>9️⃣</span>.*</dd>
   .*
 </dl>
 .*
@@ -4370,6 +4399,143 @@ next
 .*
 "
       ),
+    );
+  }
+
+  #[test]
+  fn charm_reinscription_in_same_tx_input() {
+    let server = TestServer::new_with_regtest();
+
+    server.mine_blocks(1);
+
+    let script = script::Builder::new()
+      .push_opcode(opcodes::OP_FALSE)
+      .push_opcode(opcodes::all::OP_IF)
+      .push_slice(b"ord")
+      .push_slice([1])
+      .push_slice(b"text/plain;charset=utf-8")
+      .push_slice([])
+      .push_slice(b"foo")
+      .push_opcode(opcodes::all::OP_ENDIF)
+      .push_opcode(opcodes::OP_FALSE)
+      .push_opcode(opcodes::all::OP_IF)
+      .push_slice(b"ord")
+      .push_slice([1])
+      .push_slice(b"text/plain;charset=utf-8")
+      .push_slice([])
+      .push_slice(b"bar")
+      .push_opcode(opcodes::all::OP_ENDIF)
+      .push_opcode(opcodes::OP_FALSE)
+      .push_opcode(opcodes::all::OP_IF)
+      .push_slice(b"ord")
+      .push_slice([1])
+      .push_slice(b"text/plain;charset=utf-8")
+      .push_slice([])
+      .push_slice(b"qix")
+      .push_opcode(opcodes::all::OP_ENDIF)
+      .into_script();
+
+    let witness = Witness::from_slice(&[script.into_bytes(), Vec::new()]);
+
+    let txid = server.bitcoin_rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, witness)],
+      ..Default::default()
+    });
+
+    server.mine_blocks(1);
+
+    let id = InscriptionId { txid, index: 0 };
+    server.assert_response_regex(
+      format!("/inscription/{id}"),
+      StatusCode::OK,
+      format!(
+        ".*<h1>Inscription 0</h1>.*
+<dl>
+  <dt>id</dt>
+  <dd class=monospace>{id}</dd>
+  <dt>output value</dt>
+  .*
+</dl>
+.*
+"
+      ),
+    );
+
+    let id = InscriptionId { txid, index: 1 };
+    server.assert_response_regex(
+      format!("/inscription/{id}"),
+      StatusCode::OK,
+      ".*
+    <span title=reinscription>♻️</span>
+    <span title=cursed>👹</span>.*",
+    );
+
+    let id = InscriptionId { txid, index: 2 };
+    server.assert_response_regex(
+      format!("/inscription/{id}"),
+      StatusCode::OK,
+      ".*
+    <span title=reinscription>♻️</span>
+    <span title=cursed>👹</span>.*",
+    );
+  }
+
+  #[test]
+  fn charm_reinscription_in_same_tx_with_pointer() {
+    let server = TestServer::new_with_regtest();
+
+    server.mine_blocks(3);
+
+    let cursed_inscription = inscription("text/plain", "bar");
+    let reinscription: Inscription = InscriptionTemplate {
+      pointer: Some(0),
+      ..Default::default()
+    }
+    .into();
+
+    let txid = server.bitcoin_rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[
+        (1, 0, 0, inscription("text/plain", "foo").to_witness()),
+        (2, 0, 0, cursed_inscription.to_witness()),
+        (3, 0, 0, reinscription.to_witness()),
+      ],
+      ..Default::default()
+    });
+
+    server.mine_blocks(1);
+
+    let id = InscriptionId { txid, index: 0 };
+    server.assert_response_regex(
+      format!("/inscription/{id}"),
+      StatusCode::OK,
+      format!(
+        ".*<h1>Inscription 0</h1>.*
+<dl>
+  <dt>id</dt>
+  <dd class=monospace>{id}</dd>
+  <dt>output value</dt>
+  .*
+</dl>
+.*
+"
+      ),
+    );
+
+    let id = InscriptionId { txid, index: 1 };
+    server.assert_response_regex(
+      format!("/inscription/{id}"),
+      StatusCode::OK,
+      ".*
+    <span title=cursed>👹</span>.*",
+    );
+
+    let id = InscriptionId { txid, index: 2 };
+    server.assert_response_regex(
+      format!("/inscription/{id}"),
+      StatusCode::OK,
+      ".*
+    <span title=reinscription>♻️</span>
+    <span title=cursed>👹</span>.*",
     );
   }
 
@@ -4636,5 +4802,35 @@ next
     assert_eq!(children_json.ids[10], hundred_eleventh_child_inscription_id);
     assert!(!children_json.more);
     assert_eq!(children_json.page, 1);
+  }
+
+  #[test]
+  fn inscriptions_in_block_page() {
+    let server = TestServer::new_with_regtest_with_index_sats();
+
+    for _ in 0..101 {
+      server.mine_blocks(1);
+    }
+
+    for i in 0..101 {
+      server.bitcoin_rpc_server.broadcast_tx(TransactionTemplate {
+        inputs: &[(i + 1, 0, 0, inscription("text/foo", "hello").to_witness())],
+        ..Default::default()
+      });
+    }
+
+    server.mine_blocks(1);
+
+    server.assert_response_regex(
+      "/inscriptions/block/102",
+      StatusCode::OK,
+      r".*(<a href=/inscription/[[:xdigit:]]{64}i0>.*</a>.*){100}.*",
+    );
+
+    server.assert_response_regex(
+      "/inscriptions/block/102/1",
+      StatusCode::OK,
+      r".*<a href=/inscription/[[:xdigit:]]{64}i0>.*</a>.*",
+    );
   }
 }

@@ -65,7 +65,7 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
     let mut allocated: Vec<HashMap<u128, u128>> = vec![HashMap::new(); tx.output.len()];
 
     if let Some(runestone) = runestone {
-      // Determine if this runestone conains a valid issuance
+      // Determine if this runestone contains a valid issuance
       let mut allocation = match runestone.etching {
         Some(etching) => {
           // If the issuance symbol is already taken, the issuance is ignored
@@ -295,6 +295,12 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
         for (id, balance) in unallocated {
           if balance > 0 {
             *allocated[vout].entry(id).or_default() += balance;
+          }
+        }
+      } else {
+        for (id, balance) in unallocated {
+          if balance > 0 {
+            *burned.entry(id).or_default() += balance;
           }
         }
       }

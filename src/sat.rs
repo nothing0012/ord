@@ -64,9 +64,13 @@ impl Sat {
   /// `Sat::rarity` is expensive and is called frequently when indexing.
   /// Sat::is_common only checks if self is `Rarity::Common` but is
   /// much faster.
-  pub(crate) fn is_common(self) -> bool {
+  pub(crate) fn common(self) -> bool {
     let epoch = self.epoch();
     (self.0 - epoch.starting_sat().0) % epoch.subsidy() != 0
+  }
+
+  pub(crate) fn coin(self) -> bool {
+    self.n() % COIN_VALUE == 0
   }
 
   pub(crate) fn name(self) -> String {
@@ -619,11 +623,11 @@ mod tests {
   }
 
   #[test]
-  fn is_common() {
+  fn common() {
     #[track_caller]
     fn case(n: u64) {
       assert_eq!(
-        Sat(n).is_common(),
+        Sat(n).common(),
         Sat(n).rarity() == Rarity::Common || Sat(n).rarity() > Rarity::Mythic
       );
     }
@@ -636,6 +640,14 @@ mod tests {
     case(2067187500000000 - 1);
     case(2067187500000000);
     case(2067187500000000 + 1);
+  }
+
+  #[test]
+  fn coin() {
+    assert!(Sat(0).coin());
+    assert!(!Sat(COIN_VALUE - 1).coin());
+    assert!(Sat(COIN_VALUE).coin());
+    assert!(!Sat(COIN_VALUE + 1).coin());
   }
 
   #[test]

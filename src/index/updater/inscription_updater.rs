@@ -77,9 +77,10 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
   ) -> Result {
     let mut envelopes = ParsedEnvelope::from_transaction(tx).into_iter().peekable();
     let mut floating_inscriptions = Vec::new();
+    let mut id_counter = 0;
     let mut inscribed_offsets = BTreeMap::new();
     let mut total_input_value = 0;
-    let mut id_counter = 0;
+    let total_output_value = tx.output.iter().map(|txout| txout.value).sum::<u64>();
 
     for (input_index, tx_in) in tx.input.iter().enumerate() {
       // skip subsidy since no inscriptions possible
@@ -140,8 +141,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           index: id_counter,
         };
 
-        let inscribed_offset = inscribed_offsets.get(&offset);
-
         let curse = if self.height >= self.chain.jubilee_height() {
           None
         } else if inscription.payload.unrecognized_even_field {
@@ -160,7 +159,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           Some(Curse::Pushnum)
         } else if inscription.stutter {
           Some(Curse::Stutter)
-        } else if let Some((id, count)) = inscribed_offset {
+        } else if let Some((id, count)) = inscribed_offsets.get(&offset) {
           if *count > 1 {
             Some(Curse::Reinscription)
           } else {
@@ -189,11 +188,17 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 
         let unbound = current_input_value == 0 || curse == Some(Curse::UnrecognizedEvenField);
 
+        let offset = inscription
+          .payload
+          .pointer()
+          .filter(|&pointer| pointer < total_output_value)
+          .unwrap_or(offset);
+
         floating_inscriptions.push(Flotsam {
           inscription_id,
           offset,
           origin: Origin::New {
-            reinscription: inscribed_offset.is_some(),
+            reinscription: inscribed_offsets.get(&offset).is_some(),
             cursed: curse.is_some(),
             fee: 0,
             hidden: inscription.payload.hidden(),
@@ -203,6 +208,11 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             inscription: inscription.clone().payload,
           },
         });
+
+        inscribed_offsets
+          .entry(offset)
+          .or_insert((inscription_id, 0))
+          .1 += 1;
 
         envelopes.next();
         id_counter += 1;
@@ -229,8 +239,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     }
 
     // still have to normalize over inscription size
-    let total_output_value = tx.output.iter().map(|txout| txout.value).sum::<u64>();
-
     for flotsam in &mut floating_inscriptions {
       if let Flotsam {
         origin: Origin::New { ref mut fee, .. },
@@ -454,6 +462,10 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         if let Some(sat) = sat {
           if sat.nineball() {
             Charm::Nineball.set(&mut charms);
+          }
+
+          if sat.coin() {
+            Charm::Coin.set(&mut charms);
           }
 
           match sat.rarity() {
