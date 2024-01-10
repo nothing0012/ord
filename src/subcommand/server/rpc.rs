@@ -406,15 +406,11 @@ mod tests {
         },
         BlockRarityInfo {
           block_rarity: BlockRarity::Alpha,
-          chunks: vec![
-            (46_000_000_000, 46_000_000_001)
-          ]
+          chunks: vec![(46_000_000_000, 46_000_000_001)]
         },
         BlockRarityInfo {
           block_rarity: BlockRarity::Omega,
-          chunks: vec![
-            (45_999_999_999, 46_000_000_000),
-          ]
+          chunks: vec![(45_999_999_999, 46_000_000_000),]
         },
       ]
     );
@@ -446,22 +442,15 @@ mod tests {
         },
         BlockRarityInfo {
           block_rarity: BlockRarity::Palindrome,
-          chunks: vec![
-            (45099999054, 45099999055),
-            (45100000154, 45100000155)
-          ]
+          chunks: vec![(45099999054, 45099999055), (45100000154, 45100000155)]
         },
         BlockRarityInfo {
           block_rarity: BlockRarity::Alpha,
-          chunks: vec![
-            (45_100_000_000, 45_100_000_001)
-          ]
+          chunks: vec![(45_100_000_000, 45_100_000_001)]
         },
         BlockRarityInfo {
           block_rarity: BlockRarity::Omega,
-          chunks: vec![
-            (45_099_999_999, 45_100_000_000),
-          ]
+          chunks: vec![(45_099_999_999, 45_100_000_000),]
         },
       ]
     );
