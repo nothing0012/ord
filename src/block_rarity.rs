@@ -9,8 +9,11 @@ pub enum BlockRarity {
   FirstTransaction,
   Pizza,
   Block9,
+  Block9_450,
   Block78,
   Palindrome,
+  Alpha,
+  Omega,
 }
 
 impl Display for BlockRarity {
@@ -25,7 +28,10 @@ impl Display for BlockRarity {
         Self::Palindrome => "palindrome",
         Self::Pizza => "pizza",
         Self::Block9 => "block9",
+        Self::Block9_450 => "block9_450",
         Self::Block78 => "block78",
+        Self::Alpha => "alpha",
+        Self::Omega => "omega",
       }
     )
   }
@@ -50,6 +56,9 @@ impl From<Sat> for Vec<BlockRarity> {
         if sat.n() >= FIRST_TRANSACTION_SAT_RANGE.0 && sat.n() < FIRST_TRANSACTION_SAT_RANGE.1 {
           res.push(BlockRarity::FirstTransaction);
         }
+        if sat.n() >= BLOCK9_450_SAT_RANGE.0 && sat.n() < BLOCK9_450_SAT_RANGE.1 {
+          res.push(BlockRarity::Block9_450);
+        }
         res.push(BlockRarity::Block9);
       } else if block_height == BLOCK78_BLOCK_HEIGHT {
         res.push(BlockRarity::Block78);
@@ -58,6 +67,12 @@ impl From<Sat> for Vec<BlockRarity> {
 
     if is_palindrome(&sat.n()) {
       res.push(BlockRarity::Palindrome);
+    }
+
+    if sat.n() % COIN_VALUE == 0 {
+      res.push(BlockRarity::Alpha)
+    } else if sat.n() % COIN_VALUE == COIN_VALUE - 1 {
+      res.push(BlockRarity::Omega)
     }
     res
   }
@@ -74,6 +89,7 @@ impl FromStr for BlockRarity {
       "palindrome" => Ok(Self::Palindrome),
       "pizza" => Ok(Self::Pizza),
       "block9" => Ok(Self::Block9),
+      "block9_450" => Ok(Self::Block9_450),
       "block78" => Ok(Self::Block78),
       _ => Err(anyhow!("invalid rarity: {s}")),
     }
@@ -157,6 +173,16 @@ mod tests {
         BlockRarity::Vintage,
         BlockRarity::Nakamoto,
         BlockRarity::FirstTransaction,
+        BlockRarity::Block9_450,
+        BlockRarity::Block9
+      ]
+    );
+    assert_eq!(
+      Sat(45217789073).block_rarities(),
+      [
+        BlockRarity::Vintage,
+        BlockRarity::Nakamoto,
+        BlockRarity::FirstTransaction,
         BlockRarity::Block9
       ]
     );
@@ -230,6 +256,7 @@ pub const NAKAMOTO_BLOCK_HEIGHTS: [u32; 19] = [
   23014, 28593, 29097,
 ];
 pub const FIRST_TRANSACTION_SAT_RANGE: (u64, u64) = (45000000000, 46000000000);
+pub const BLOCK9_450_SAT_RANGE: (u64, u64) = (45000000000, 45100000000);
 
 lazy_static! {
   pub static ref PIZZA_RANGE_MAP: HashMap<u32, Vec<(u64, u64)>> = {

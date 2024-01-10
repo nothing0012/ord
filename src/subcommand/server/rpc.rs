@@ -1,7 +1,7 @@
 use super::*;
 use crate::block_rarity::{
-  BLOCK78_BLOCK_HEIGHT, BLOCK9_BLOCK_HEIGHT, FIRST_TRANSACTION_SAT_RANGE, NAKAMOTO_BLOCK_HEIGHTS,
-  PIZZA_RANGE_MAP, VINTAGE_BLOCK_HEIGHT,
+  BLOCK78_BLOCK_HEIGHT, BLOCK9_450_SAT_RANGE, BLOCK9_BLOCK_HEIGHT, FIRST_TRANSACTION_SAT_RANGE,
+  NAKAMOTO_BLOCK_HEIGHTS, PIZZA_RANGE_MAP, VINTAGE_BLOCK_HEIGHT,
 };
 use crate::subcommand::{traits::Output as SatDetails, wallet::sats::rare_sats_from_outpoint};
 use axum_jrpc::{
@@ -169,10 +169,13 @@ fn get_block_rarities(start: u64, end: u64) -> Result<Vec<BlockRarityInfo>> {
     BlockRarity::Vintage,
     BlockRarity::Nakamoto,
     BlockRarity::Block9,
+    BlockRarity::Block9_450,
     BlockRarity::Block78,
     BlockRarity::FirstTransaction,
     BlockRarity::Pizza,
     BlockRarity::Palindrome,
+    BlockRarity::Alpha,
+    BlockRarity::Omega,
   ] {
     let chunks = get_block_rarity_chunks(block_rarity, start, end);
     if !chunks.is_empty() {
@@ -206,6 +209,11 @@ fn get_block_rarity_chunks(block_rarity: &BlockRarity, start: u64, end: u64) -> 
         chunks.push((start, end));
       }
     }
+    BlockRarity::Block9_450 => {
+      if block_height == BLOCK9_BLOCK_HEIGHT && start < BLOCK9_450_SAT_RANGE.1 {
+        chunks.push((start, min(BLOCK9_450_SAT_RANGE.1, end)));
+      }
+    }
     BlockRarity::Block78 => {
       if block_height == BLOCK78_BLOCK_HEIGHT {
         chunks.push((start, end));
@@ -230,6 +238,16 @@ fn get_block_rarity_chunks(block_rarity: &BlockRarity, start: u64, end: u64) -> 
     BlockRarity::Palindrome => {
       for palindrome in get_palindromes_from_sat_range(start, end) {
         chunks.push((palindrome, palindrome + 1))
+      }
+    }
+    BlockRarity::Alpha => {
+      for alpha in get_alpha_from_sat_range(start, end) {
+        chunks.push((alpha, alpha + 1))
+      }
+    }
+    BlockRarity::Omega => {
+      for omega in get_omega_from_sat_range(start, end) {
+        chunks.push((omega, omega + 1))
       }
     }
   }
@@ -311,6 +329,26 @@ fn get_palindromes_from_equal_length_range(start_string: String, end_string: Str
   palindromes
 }
 
+fn get_alpha_from_sat_range(start: u64, end: u64) -> Vec<u64> {
+  let mut alphas: Vec<u64> = vec![];
+  let mut alpha = (start - 1) / COIN_VALUE * COIN_VALUE + COIN_VALUE;
+  while alpha < end {
+    alphas.push(alpha);
+    alpha += COIN_VALUE;
+  }
+  alphas
+}
+
+fn get_omega_from_sat_range(start: u64, end: u64) -> Vec<u64> {
+  let mut omegas: Vec<u64> = vec![];
+  let mut omega = end / COIN_VALUE * COIN_VALUE - 1;
+  while omega >= start {
+    omegas.push(omega);
+    omega -= COIN_VALUE;
+  }
+  omegas
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -365,7 +403,66 @@ mod tests {
             (45_999_999_954, 45_999_999_955),
             (46_000_000_064, 46_000_000_065)
           ]
-        }
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Alpha,
+          chunks: vec![
+            (46_000_000_000, 46_000_000_001)
+          ]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Omega,
+          chunks: vec![
+            (45_999_999_999, 46_000_000_000),
+          ]
+        },
+      ]
+    );
+
+    block_rarities =
+      get_block_rarities(451 * COIN_VALUE - 10_000, 451 * COIN_VALUE + 10_000).unwrap();
+    assert_eq!(
+      block_rarities,
+      vec![
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Vintage,
+          chunks: vec![(451 * COIN_VALUE - 10_000, 451 * COIN_VALUE + 10_000)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Nakamoto,
+          chunks: vec![(451 * COIN_VALUE - 10_000, 451 * COIN_VALUE + 10_000)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Block9,
+          chunks: vec![(451 * COIN_VALUE - 10_000, 451 * COIN_VALUE + 10_000)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Block9_450,
+          chunks: vec![(451 * COIN_VALUE - 10_000, 451 * COIN_VALUE)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::FirstTransaction,
+          chunks: vec![(451 * COIN_VALUE - 10_000, 451 * COIN_VALUE + 10_000)]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Palindrome,
+          chunks: vec![
+            (45099999054, 45099999055),
+            (45100000154, 45100000155)
+          ]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Alpha,
+          chunks: vec![
+            (45_100_000_000, 45_100_000_001)
+          ]
+        },
+        BlockRarityInfo {
+          block_rarity: BlockRarity::Omega,
+          chunks: vec![
+            (45_099_999_999, 45_100_000_000),
+          ]
+        },
       ]
     );
 
