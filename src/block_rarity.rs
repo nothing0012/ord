@@ -177,7 +177,7 @@ fn split_palindrome_evenly(s: &str, n: usize) -> Result<Vec<&str>, &'static str>
   // for palindrom, we only need the 1st half of substrings.
   while start < len / 2 {
     vec.push(&s[start..start + n]);
-    start = start + n;
+    start += n;
   }
   Ok(vec)
 }
