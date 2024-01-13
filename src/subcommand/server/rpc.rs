@@ -255,7 +255,9 @@ fn get_block_rarity_chunks(
       let mut normal_chunks = vec![];
       let mut perfect_chunks = vec![];
       let mut uniform_chunks = vec![];
-      for palindrome in get_palindromes_from_sat_range(start, end) {
+      // "end" sat is exclusive, but get_palindromes_from_sat_range wants both start and end
+      // to be inclusive, a.k.a [start, end] range.
+      for palindrome in get_palindromes_from_sat_range(start, end - 1) {
         normal_chunks.push((palindrome, palindrome + 1));
         if is_perfect_palindrome(&palindrome.to_string()) {
           perfect_chunks.push((palindrome, palindrome + 1));
