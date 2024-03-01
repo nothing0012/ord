@@ -88,10 +88,8 @@ impl From<Sat> for Vec<BlockRarity> {
       } else if block_height == BLOCK666_BLOCK_HEIGHT {
         res.push(BlockRarity::Block666);
       }
-    } else {
-      if block_height == TAPROOT_BLOCK_HEIGHT {
-        res.push(BlockRarity::Taproot);
-      }
+    } else if block_height == TAPROOT_BLOCK_HEIGHT {
+      res.push(BlockRarity::Taproot);
     }
 
     let s = &sat.n().to_string();
