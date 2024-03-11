@@ -1844,12 +1844,9 @@ mod tests {
       self
     }
 
-    fn new_with_timeout() -> Self {
-      Self::new_with_args(&[], &["--timeout", "1"])
-    }
-
-    fn new_with_args(ord_args: &[&str], server_args: &[&str]) -> Self {
-      Self::new_server(test_bitcoincore_rpc::spawn(), None, ord_args, server_args)
+    fn server_option(mut self, option: &str, value: &str) -> Self {
+      self.server_args.insert(option.into(), Some(value.into()));
+      self
     }
 
     fn server_flag(mut self, flag: &str) -> Self {
@@ -2001,6 +1998,10 @@ mod tests {
 
     fn redirect_http_to_https(self) -> Self {
       self.server_flag("--redirect-http-to-https")
+    }
+
+    fn timeout(self) -> Self {
+      self.server_option("--timeout", "1")
     }
   }
 
@@ -3264,11 +3265,14 @@ mod tests {
 
   #[test]
   fn output_with_timeout() {
-    TestServer::new_with_timeout().assert_response_regex(
-      "/block/0",
-      StatusCode::OK,
-      ".*<title>Block 0</title>.*<h1>Block 0</h1>.*",
-    );
+    TestServer::builder()
+      .timeout()
+      .build()
+      .assert_response_regex(
+        "/block/0",
+        StatusCode::OK,
+        ".*<title>Block 0</title>.*<h1>Block 0</h1>.*",
+      );
   }
 
   #[test]
