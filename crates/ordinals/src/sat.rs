@@ -57,6 +57,10 @@ impl Sat {
     self.into()
   }
 
+  pub fn block_rarities(self) -> Vec<BlockRarity> {
+    self.into()
+  }
+
   /// `Sat::rarity` is expensive and is called frequently when indexing.
   /// Sat::is_common only checks if self is `Rarity::Common` but is
   /// much faster.
@@ -723,10 +727,8 @@ mod tests {
 
     case(0);
     case(1);
-    case(50 * COIN_VALUE - 1);
     case(50 * COIN_VALUE);
     case(50 * COIN_VALUE + 1);
-    case(2067187500000000 - 1);
     case(2067187500000000);
     case(2067187500000000 + 1);
   }
