@@ -81,23 +81,6 @@ impl Display for InscriptionQuery {
   }
 }
 
-enum BlockQuery {
-  Height(u32),
-  Hash(BlockHash),
-}
-
-impl FromStr for BlockQuery {
-  type Err = Error;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    Ok(if s.len() == 64 {
-      BlockQuery::Hash(s.parse()?)
-    } else {
-      BlockQuery::Height(s.parse()?)
-    })
-  }
-}
-
 enum SpawnConfig {
   Https(AxumAcceptor),
   Http,
