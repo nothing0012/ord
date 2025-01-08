@@ -43,7 +43,7 @@ jobs:
       with:
         override: true
         target: ${{ matrix.target }}
-        toolchain: stable
+        toolchain: 1.77.1
 
     - name: Install Linux Dependencies
       if: ${{ matrix.os == 'ubuntu-latest' }}
